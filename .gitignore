@@ -1,4 +1,26 @@
+# Gradle
 .gradle/
 build/
+
+# Java / IDE build output (including copied test resources)
+bin/
+out/
+*.class
+*.log
+
+# IntelliJ IDEA
 .idea/
 *.iml
+*.ipr
+*.iws
+
+# Eclipse / VS Code Java
+.classpath
+.project
+.settings/
+.vscode/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
