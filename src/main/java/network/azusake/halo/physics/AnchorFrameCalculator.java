@@ -151,6 +151,12 @@ public final class AnchorFrameCalculator {
         Vec3d forward = rotate(new Vec3d(0, 0, 1), headRotation);
         Vec3d headUp = rotate(new Vec3d(0, 1, 0), headRotation);
 
+        // Coincident origins have no radial look direction. Use the limiting direction of an
+        // infinitesimal head-up offset instead of passing a zero axis to Quaternionf.rotateAxis.
+        if (toHead.lengthSquared() == 0) toHead = headUp.multiply(-1);
+        Vec3d anchorDirection = headRelOffset.normalize();
+        if (anchorDirection.lengthSquared() == 0) anchorDirection = headUp;
+
         // 7. Look-at orientation: shortest-arc rotation mapping definition -Y → toHead.
         //    This preserves the "up" direction as close to world-up as the
         //    rotation allows — matching the old axis-angle billboard-facing behaviour.
@@ -175,7 +181,7 @@ public final class AnchorFrameCalculator {
                 // The anchor point P = direction from head to halo target on the sphere.
                 // The "up pole" is 90° from P along the headUp great circle.
                 // The halo's +Z should point toward this pole like a compass.
-                Vec3d P = headRelOffset.normalize(); // anchor-point radial direction
+                Vec3d P = anchorDirection; // anchor-point radial direction, defined even at zero offset
                 Quaternionf Q_target = computeLockedSpin(Q_lookAt, toHead, headUp, P);
 
                 // Retrieve or initialise the damped locked-spin state
@@ -233,7 +239,7 @@ public final class AnchorFrameCalculator {
                 // OUTSIDE — the halo rotates with the head in world space.
                 Quaternionf Q_rel = syncRelativeStates.get(uuid);
                 if (Q_rel == null || needsSnap) {
-                    Vec3d P = headRelOffset.normalize();
+                    Vec3d P = anchorDirection;
                     Quaternionf Q_lockedSpin = computeLockedSpin(Q_lookAt, toHead, headUp, P);
                     Quaternionf Q_LOCKED = Q_lockedSpin.mul(Q_lookAt, new Quaternionf());
 

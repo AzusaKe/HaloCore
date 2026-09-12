@@ -24,7 +24,7 @@ package network.azusake.halo.data;
 public record SchemaVersion(int major, int minor, int patch) implements Comparable<SchemaVersion> {
 
     /** Current schema version supported by this mod build. */
-    public static final SchemaVersion CURRENT = new SchemaVersion(1, 0, 10);
+    public static final SchemaVersion CURRENT = new SchemaVersion(1, 1, 0);
 
     /** Parse a version string like "1.0.10" into a SchemaVersion. */
     public static SchemaVersion parse(String raw) {

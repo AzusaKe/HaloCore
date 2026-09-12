@@ -51,6 +51,9 @@ class AdapterContractTest {
     @Test void stablePortSignaturesDoNotExposeMathOrJsonLibraries() {
         for (Class<?> type : List.of(ClientPort.class, ResourceInput.class, DefinitionSnapshot.class,
                 BodyPose.class, FrameScene.class, DrawBatch.class, RuntimeConfigSnapshot.class,
+                TriangleMesh.class, VisualResources.class, VisualResources.TextureInfo.class,
+                MaterialState.class, MaterialState.Mesh.class, MaterialState.AlphaMask.class,
+                DefinitionSnapshot.AssetDependencies.class, VisualAssetLoader.class, VisualAssetLoader.Source.class,
                 ServerRuntime.OwnershipStore.class, ServerRuntime.Updates.class)) {
             for (var method : type.getDeclaredMethods()) {
                 if (!java.lang.reflect.Modifier.isPublic(method.getModifiers())) continue;

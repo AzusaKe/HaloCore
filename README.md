@@ -1,4 +1,4 @@
-# HaloCore 1.3.1
+# HaloCore 2.0.0 (development)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -70,9 +70,44 @@ for hosts that only need diagnostic logging. Callbacks must not mutate the runti
 - Light/texture callbacks are read-only facts for the frame. Millisecond time is shared across animation
   stages; nanosecond deltas drive the retained EMA and damping clamp. Fake clocks enable replay tests.
 
+## Mesh adapter contract (2.0.0)
+
+`DefinitionSnapshot.assets()` exposes the deduplicated model and texture IDs required by mesh primitives.
+`VisualAssetLoader` accepts a host `Source` for OBJ text and decoded texture metadata; create a new loader
+for each resource reload. It caches successes and failures by resource ID, reports each failed read once,
+and produces immutable `VisualResources` snapshots. Definitions may change within a generation without
+reparsing shared assets. `TriangleMesh` owns indexed positions and UVs; its bounds use referenced vertices.
+
+Supply one `VisualResources` snapshot in `FrameScene.visuals()`. The old constructor supplies an empty
+snapshot, retaining old primitive behavior. Missing mesh assets skip that primitive without revoking
+ownership. Publish definitions and their visual resources together on the client owner thread; perform
+resource reading, OBJ parsing, image inspection and texture uploads in the loading stage, never in draw.
+
+`DrawBatch.material()` is `MaterialState.LEGACY` for old primitives, including batches constructed with
+the old constructor. `MaterialState.Mesh` requests base-texture rendering with an optional evaluated
+`AlphaMask`. Its offsets are already wrapped into [0,1); sample mask R at `fract(baseUV + offset)` with
+nearest repeating level-zero sampling, ignoring mask alpha and applying no sRGB conversion. LINEAR uses
+the gray value; STEP uses `gray >= threshold`. Multiply the result by base texture alpha and batch alpha
+exactly once, discarding only final alpha <= 0. Never substitute the legacy 0.1 cutoff.
+
+Core submits old primitives in their original order, then depth-writing meshes, then transparent meshes
+sorted by instance center and triangle center in view-space depth. Honor each batch's depth/blend/cull
+flags and preserve ordering. Transparency sorting is approximate for intersecting geometry and is not
+a global sort with the host world's translucent surfaces. Geometry, brightness and animation rules are
+platform independent; shader programs and GPU resource lifetimes belong exclusively to the host.
+
+Mesh `size:[x,y,z]` fits the authored bounds in blocks by axis, without moving the exported origin or
+changing axes. Group transforms apply afterwards. Zero source extent requires target size=0 and uses
+scale=1 on that axis. UV V is flipped only by OBJ import. The parser supports textured triangles and
+planar convex quads, positive/negative independent indices and optional normals. MTL and names are
+ignored; unsupported polygons require export-time triangulation. Limits are 16 MiB text, 1,000,000
+declared position/UV/normal elements combined, and 250,000 triangles; these are load guards, not frame
+rate promises. The first release targets low-poly decorative geometry.
+
 ## Versioning
 
-Feature version is in `gradle.properties`; the accepted refactor baseline is **1.3.1**, schema **1.0.10**.
+Feature version is in `gradle.properties`; mesh development is **2.0.0**, schema **1.1.0**.
+The accepted refactor baseline remains **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.
 Halo embeds this repository with a Git submodule and resolves `network.azusake:halo-core` using a Gradle
 composite build. Its gitlink, not a moving branch or this version string, pins exact source.

@@ -3,9 +3,7 @@ package network.azusake.halo.shape;
 /**
  * A renderable primitive inside a {@link HaloGroup}.
  *
- * <p>Sealed to {@link BillboardPrimitive} and {@link RingPrimitive};
- * future phases will add {@code Model3dPrimitive} for glTF/Blockbench
- * model support.</p>
+ * <p>Geometry and material rules are implemented in core; the host supplies resources.</p>
  */
-public sealed interface HaloPrimitive permits BillboardPrimitive, RingPrimitive {
+public sealed interface HaloPrimitive permits BillboardPrimitive, RingPrimitive, MeshPrimitive {
 }

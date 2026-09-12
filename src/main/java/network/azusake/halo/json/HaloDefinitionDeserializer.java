@@ -314,6 +314,7 @@ public class HaloDefinitionDeserializer implements JsonDeserializer<HaloDefiniti
         return switch (type) {
             case "billboard" -> parseBillboardPrimitive(obj);
             case "ring" -> parseRingPrimitive(obj);
+            case "mesh" -> parseMeshPrimitive(obj);
             default -> throw new JsonParseException("Unknown primitive type: " + type);
         };
     }
@@ -325,6 +326,66 @@ public class HaloDefinitionDeserializer implements JsonDeserializer<HaloDefiniti
         // facing the camera and no animation rotation can override that.
         boolean faceCamera = obj.has("face_camera") && obj.get("face_camera").getAsBoolean();
         return new BillboardPrimitive(texture, size, faceCamera);
+    }
+
+    private MeshPrimitive parseMeshPrimitive(JsonObject obj) {
+        Identifier model = requiredResource(obj, "model");
+        if (!model.getPath().endsWith(".obj")) throw new JsonParseException("mesh.model must reference an .obj resource");
+        Identifier texture = requiredResource(obj, "texture");
+        JsonArray size = obj.getAsJsonArray("size");
+        if (size == null || size.size() != 3) throw new JsonParseException("mesh.size must contain exactly three numbers [x,y,z]");
+        Vec3d dimensions = new Vec3d(size.get(0).getAsDouble(), size.get(1).getAsDouble(), size.get(2).getAsDouble());
+        MeshPrimitive.Material material = MeshPrimitive.Material.DEFAULT;
+        if (obj.has("material")) {
+            JsonObject mat = obj.getAsJsonObject("material");
+            boolean doubleSided = !mat.has("double_sided") || mat.get("double_sided").getAsBoolean();
+            MeshPrimitive.AlphaMask mask = null;
+            if (mat.has("effects")) {
+                JsonArray effects = mat.getAsJsonArray("effects");
+                if (effects.size() > 1) throw new JsonParseException("mesh material supports at most one alpha_mask effect");
+                if (!effects.isEmpty()) {
+                    JsonObject effect = effects.get(0).getAsJsonObject();
+                    if (!"alpha_mask".equals(effect.get("type").getAsString())) {
+                        throw new JsonParseException("Unknown mesh material effect: " + effect.get("type"));
+                    }
+                    var mode = switch (effect.has("mode") ? effect.get("mode").getAsString() : "linear") {
+                        case "linear" -> network.azusake.halo.core.render.MaterialState.MaskMode.LINEAR;
+                        case "step" -> network.azusake.halo.core.render.MaterialState.MaskMode.STEP;
+                        default -> throw new JsonParseException("alpha_mask.mode must be linear or step");
+                    };
+                    float threshold = effect.has("threshold") ? effect.get("threshold").getAsFloat() : 0.5f;
+                    mask = new MeshPrimitive.AlphaMask(requiredResource(effect, "texture"), mode, threshold,
+                        parseMeshTerms(effect, "u"), parseMeshTerms(effect, "v"));
+                }
+            }
+            material = new MeshPrimitive.Material(doubleSided, mask);
+        }
+        return new MeshPrimitive(model, texture, dimensions, material);
+    }
+
+    private List<AnimationTerm> parseMeshTerms(JsonObject effect, String axis) {
+        var terms = parseAnimationTerms(effect, "uv_offset", axis);
+        for (var term : terms) {
+            double[] parameters;
+            if (term instanceof AnimationTerm.Sin sin) parameters = new double[]{sin.A(), sin.omega(), sin.phi()};
+            else if (term instanceof AnimationTerm.Cos cos) parameters = new double[]{cos.A(), cos.omega(), cos.phi()};
+            else if (term instanceof AnimationTerm.Linear linear) parameters = new double[]{linear.start(), linear.speed()};
+            else throw new JsonParseException("Unknown mask animation term");
+            for (double n : parameters) if (!Double.isFinite(n)) throw new JsonParseException("Non-finite mask animation parameter");
+        }
+        return terms;
+    }
+
+    private static Identifier requiredResource(JsonObject obj, String key) {
+        if (!obj.has(key) || !obj.get(key).isJsonPrimitive() || !obj.getAsJsonPrimitive(key).isString()) {
+            throw new JsonParseException("Missing resource identifier: " + key);
+        }
+        Identifier id = Identifier.tryParse(obj.get(key).getAsString());
+        if (id == null || id.getPath().isEmpty() || id.getPath().startsWith("/")
+                || java.util.Arrays.asList(id.getPath().split("/")).contains("..")) {
+            throw new JsonParseException("Invalid resource identifier: " + obj.get(key));
+        }
+        return id;
     }
 
     private RingPrimitive parseRingPrimitive(JsonObject obj) {

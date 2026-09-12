@@ -9,8 +9,14 @@ import network.azusake.halo.core.Vec3d;
 /** Immutable host input for one main-camera frame. Positions are doubles in world units. */
 public record FrameScene(long worldToken, long timeMillis, long frameNanos,
                          CameraSample camera, Map<UUID, EntitySample> entities,
-                         float[] rootTransform, LightSampler lights, TextureLookup textures) {
-    public FrameScene { entities = Map.copyOf(entities); rootTransform = rootTransform.clone(); }
+                         float[] rootTransform, LightSampler lights, TextureLookup textures,
+                         VisualResources visuals) {
+    public FrameScene { entities = Map.copyOf(entities); rootTransform = rootTransform.clone(); java.util.Objects.requireNonNull(visuals); }
+    public FrameScene(long worldToken, long timeMillis, long frameNanos, CameraSample camera,
+                      Map<UUID, EntitySample> entities, float[] rootTransform, LightSampler lights,
+                      TextureLookup textures) {
+        this(worldToken, timeMillis, frameNanos, camera, entities, rootTransform, lights, textures, VisualResources.EMPTY);
+    }
     @Override public float[] rootTransform() { return rootTransform.clone(); }
     public record CameraSample(Vec3d position, Vec3d up, Vec3d right) {
         public Vec3d getPos() { return position; }

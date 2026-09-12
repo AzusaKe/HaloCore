@@ -14,6 +14,7 @@ import network.azusake.halo.shape.HaloPrimitive;
 import network.azusake.halo.shape.RingPrimitive;
 import network.azusake.halo.shape.BillboardPrimitive;
 import network.azusake.halo.shape.HaloGroup;
+import network.azusake.halo.shape.MeshPrimitive;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -51,6 +52,7 @@ public final class SceneRenderer {
     private final ClientRuntime runtime;
     private final Consumer<Identifier> missingDefinitionWarning;
     private GeometryCollector draw;
+    private final MeshGeometryRenderer meshDraw = new MeshGeometryRenderer(message -> LOG.warn("[Halo mesh] {}", message));
     private FrameScene scene;
     private final Map<UUID,BodyPose> bodyPoses = new LinkedHashMap<>();
     public Map<UUID,BodyPose> bodyPoses() { return Map.copyOf(bodyPoses); }
@@ -131,6 +133,7 @@ public final class SceneRenderer {
         bodyPoses.clear();
         this.scene = scene;
         this.draw = new GeometryCollector(scene.textures());
+        meshDraw.begin(scene.visuals());
         FrameScene client = scene;
         MatrixStack matrices = new MatrixStack(scene.rootTransform());
         CameraSample camera = scene.camera();
@@ -226,7 +229,7 @@ public final class SceneRenderer {
             prevSleepHidden.remove(uuid);
             prevInvisHidden.remove(uuid);
         }
-        return draw.batches();
+        return meshDraw.finish(draw.batches());
     }
 
     // ------------------------------------------------------------------
@@ -577,6 +580,9 @@ public final class SceneRenderer {
                     renderBillboard(bp, matrices, camera, group.glowing(), brightness, effectiveGlow);
                 } else if (primitive instanceof RingPrimitive rp) {
                     renderRing(rp, matrices, group.glowing(), brightness, effectiveGlow);
+                } else if (primitive instanceof MeshPrimitive mesh) {
+                    meshDraw.add(mesh, matrices.peek().getPositionMatrix(), finalAlpha,
+                        group.glowing() ? effectiveGlow : brightness, animTime);
                 }
             }
 
