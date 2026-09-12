@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1 — 2026-09-12
+
+Accepted HaloCore baseline after Halo 1.20.1 Fabric multiplayer validation.
+
+- Add an optional `ClientRuntime` missing-definition warning callback for host-localized feedback.
+  Warnings are immediate, throttled across entities for 30 seconds, and reset with world/session state.
+  Missing resources continue to preserve ownership and recover on reload.
+- Keep definition schema 1.0.10 and the existing anchor API v2 unchanged.
+
 ## 1.3.0
 
 Initial extraction from Halo `1.20.1-fabric` at `b30dad7` (including its preceding local changes).

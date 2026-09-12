@@ -2,6 +2,7 @@ package network.azusake.halo.core.runtime;
 
 import java.util.*;
 import java.util.function.LongSupplier;
+import java.util.function.Consumer;
 import network.azusake.halo.core.Identifier;
 import network.azusake.halo.core.render.*;
 import network.azusake.halo.config.HaloConfig;
@@ -20,9 +21,14 @@ public final class ClientRuntime implements ClientPort {
     private Map<Identifier,HaloDefinition> definitions=Map.of();
     private Map<Identifier,HaloDefinition> definitionInput;
     private HaloConfig config=new HaloConfig();
-    private final SceneRenderer renderer = new SceneRenderer(this);
+    private final SceneRenderer renderer;
     public ClientRuntime() { this(System::currentTimeMillis); }
-    public ClientRuntime(LongSupplier clock) { this.clock=clock; }
+    public ClientRuntime(LongSupplier clock) { this(clock, id -> {}); }
+    /** The warning callback runs on the owning client thread; the host handles localized feedback. */
+    public ClientRuntime(LongSupplier clock, Consumer<Identifier> missingDefinitionWarning) {
+        this.clock=Objects.requireNonNull(clock);
+        this.renderer=new SceneRenderer(this, Objects.requireNonNull(missingDefinitionWarning));
+    }
     public long nowMillis() { return frameTime == null ? clock.getAsLong() : frameTime; }
     public HaloConfig getConfig() { return config; }
     public void setConfig(HaloConfig value) { config=value.copy(); }

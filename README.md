@@ -1,4 +1,4 @@
-# HaloCore 1.3.0
+# HaloCore 1.3.1
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -40,6 +40,13 @@ snapshot. Minecraft uses priority 0 for server data packs and 1 for client resou
 reload removes only that source. Invalid resources produce diagnostics, while valid resources publish
 together. Definitions missing on the client do not revoke ownership.
 
+Hosts can construct `ClientRuntime(clock, missingDefinitionWarning)` to receive a missing definition's
+`Identifier` on the client thread while rendering a loaded entity. Core throttles these callbacks to
+one warning per 30 seconds across all entities; the first warning is immediate. The host supplies
+localized chat or other feedback. World/session resets clear the throttle, and reloading definitions
+allows rendering to resume without reattaching the halo. The existing constructors remain available
+for hosts that only need diagnostic logging. Callbacks must not mutate the runtime during rendering.
+
 ## Frame and coordinate contract
 
 - Run all client mutations/rendering on one owning thread. The anchor API accepts submissions inside
@@ -65,7 +72,8 @@ together. Definitions missing on the client do not revoke ownership.
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the first extracted version remains **1.3.0**, schema **1.0.10**.
+Feature version is in `gradle.properties`; the accepted refactor baseline is **1.3.1**, schema **1.0.10**.
+The first extraction was released as **1.3.0**; published version tags remain immutable.
 Halo embeds this repository with a Git submodule and resolves `network.azusake:halo-core` using a Gradle
 composite build. Its gitlink, not a moving branch or this version string, pins exact source.
 

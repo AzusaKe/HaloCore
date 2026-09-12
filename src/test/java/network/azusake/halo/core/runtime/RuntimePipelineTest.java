@@ -58,6 +58,69 @@ class RuntimePipelineTest {
         assertFalse(client.render(scene(500,false,true,2)).isEmpty());
         assertEquals(id,client.assignments().get(entity));
     }
+    @Test void missingDefinitionWarnsImmediatelyAndRecoversWithoutReattaching() {
+        clock.set(0);
+        List<Identifier> warnings=new ArrayList<>();
+        ClientRuntime client=new ClientRuntime(clock::get,warnings::add);
+        client.attach(entity,id,false);
+        var instance=client.getInstance(entity);
+        assertTrue(client.render(scene(0,false,true,1)).isEmpty());
+        assertEquals(List.of(id),warnings);
+        assertEquals(id,client.assignments().get(entity));
+        assertTrue(instance.isActive());
+
+        client.definitions(Map.of(id,definition()));
+        clock.set(30_000);
+        assertFalse(client.render(scene(0,false,true,1)).isEmpty());
+        assertSame(instance,client.getInstance(entity));
+        assertEquals(List.of(id),warnings);
+
+        client.definitions(Map.of());
+        assertTrue(client.render(scene(0,false,true,1)).isEmpty());
+        assertEquals(List.of(id,id),warnings);
+        assertEquals(id,client.assignments().get(entity));
+    }
+    @Test void missingDefinitionWarningsAreThrottledAcrossFramesAndEntitiesUsingFrameTime() {
+        clock.set(0);
+        List<Identifier> warnings=new ArrayList<>();
+        ClientRuntime client=new ClientRuntime(() -> 99_000,warnings::add);
+        UUID other=UUID.fromString("00000000-0000-0000-0000-000000000002");
+        Identifier otherId=new Identifier("halo:other_missing");
+        client.attach(entity,id,false);
+        client.attach(other,otherId,false);
+        for(long millis:new long[]{0,1,16,1_000,29_999,30_000}) {
+            clock.set(millis);
+            FrameScene frame=scene(0,false,true,1);
+            var sample=frame.entities().get(entity);
+            var second=new FrameScene.EntitySample(other,2,sample.position(),true,false,false,
+                sample.anchor(),sample.fallbackAnchor());
+            client.render(new FrameScene(frame.worldToken(),frame.timeMillis(),frame.frameNanos(),
+                frame.camera(),Map.of(entity,sample,other,second),frame.rootTransform(),frame.lights(),frame.textures()));
+            assertEquals(millis<30_000?1:2,warnings.size());
+        }
+        assertTrue(warnings.stream().allMatch(warning -> warning.equals(id) || warning.equals(otherId)));
+        assertEquals(Map.of(entity,id,other,otherId),client.assignments());
+    }
+    @Test void missingDefinitionWarningsWaitForLoadedEntitiesAndResetWithWorldOrConnection() {
+        List<Identifier> warnings=new ArrayList<>();
+        ClientRuntime client=new ClientRuntime(clock::get,warnings::add);
+        client.attach(entity,id,false);
+        client.render(scene(0,false,false,1));
+        assertTrue(warnings.isEmpty());
+        client.render(scene(0,false,true,1));
+        assertEquals(List.of(id),warnings);
+        client.unload(entity);
+        client.render(scene(0,false,true,1));
+        assertEquals(1,warnings.size());
+        client.render(scene(0,false,true,2));
+        assertEquals(2,warnings.size());
+        client.clear();
+        client.render(scene(0,false,true,2));
+        assertEquals(2,warnings.size());
+        client.attach(entity,id,false);
+        client.render(scene(0,false,true,2));
+        assertEquals(List.of(id,id,id),warnings);
+    }
     @Test void serverAndTwoClientsDoNotShareAnimationInstancesOrOwnershipStorage() {
         Map<UUID,Identifier> disk=new HashMap<>();
         ClientRuntime a=new ClientRuntime(clock::get),b=new ClientRuntime(clock::get);

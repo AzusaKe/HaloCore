@@ -28,6 +28,7 @@ import network.azusake.halo.core.render.FrameScene.EntitySample;
 import network.azusake.halo.core.render.FrameScene.CameraSample;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
 /**
  * Renders halo models at their computed world-space {@link AnchorFrame}.
@@ -48,6 +49,7 @@ public final class SceneRenderer {
     private static final Logger LOG = Diagnostics.logger("halo");
 
     private final ClientRuntime runtime;
+    private final Consumer<Identifier> missingDefinitionWarning;
     private GeometryCollector draw;
     private FrameScene scene;
     private final Map<UUID,BodyPose> bodyPoses = new LinkedHashMap<>();
@@ -67,11 +69,10 @@ public final class SceneRenderer {
     public static final boolean RING_DEBUG_SEGMENTS = false;
 
     /**
-     * Throttle chat warnings for missing definitions — only show one per
-     * halo instance per 30 seconds to avoid spamming the chat during
-     * frame-by-frame rendering.
+     * One missing-definition warning per client every 30 seconds, shared by all entities.
+     * Null allows an immediate first warning even when replay time starts at zero.
      */
-    private long lastMissingDefWarningTime;
+    private Long lastMissingDefWarningTime;
 
     private final AnchorFrameCalculator frameCalculator = new AnchorFrameCalculator();
 
@@ -93,7 +94,11 @@ public final class SceneRenderer {
     /** EMA-smoothed frame delta-time, to suppress nanoTime jitter. */
     private double smoothedDt = -1;
 
-    public SceneRenderer(ClientRuntime runtime) { this.runtime = runtime; }
+    public SceneRenderer(ClientRuntime runtime) { this(runtime, id -> {}); }
+    public SceneRenderer(ClientRuntime runtime, Consumer<Identifier> missingDefinitionWarning) {
+        this.runtime = runtime;
+        this.missingDefinitionWarning = missingDefinitionWarning;
+    }
 
     /**
      * The last rendered render state of a halo (idle phase + whether the last
@@ -112,6 +117,7 @@ public final class SceneRenderer {
     public void clearWorld() {
         bodyPoses.clear(); clearIdlePhases(); frameCalculator.retainOnly(Set.of());
         prevSleepHidden.clear(); prevInvisHidden.clear(); firstFrame=true; smoothedDt=-1;
+        lastMissingDefWarningTime=null;
     }
 
     // ------------------------------------------------------------------
@@ -256,9 +262,11 @@ public final class SceneRenderer {
         // ---- resolve definition ----
         HaloDefinition def = runtime.definition(instance.getDefinitionId()).orElse(null);
         if (def == null) {
-            if (runtime.nowMillis() - lastMissingDefWarningTime > 30_000) {
-                lastMissingDefWarningTime = runtime.nowMillis();
+            long now = runtime.nowMillis();
+            if (lastMissingDefWarningTime == null || now - lastMissingDefWarningTime >= 30_000) {
+                lastMissingDefWarningTime = now;
                 LOG.warn("Missing halo definition: {}", instance.getDefinitionId());
+                missingDefinitionWarning.accept(instance.getDefinitionId());
             }
             return false;
         }
