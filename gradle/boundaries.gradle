@@ -1,0 +1,21 @@
+tasks.register('verifyCoreBoundary') {
+    group = 'verification'
+    dependsOn 'classes'
+    doLast {
+        def forbidden = ['net/minecraft/', 'net/fabricmc/', 'org/spongepowered/', 'org/lwjgl/', 'com/mojang/blaze3d/']
+        sourceSets.main.output.classesDirs.asFileTree.matching { include '**/*.class' }.each { file ->
+            // JVM constant-pool names use these ASCII byte sequences, independently of debug symbols.
+            def bytes = new String(file.bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+            if (forbidden.any { bytes.contains(it) }) throw new GradleException("Platform dependency in core bytecode: ${file}")
+        }
+        def dependencies = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect { it.moduleVersion.id.toString() }.toSet()
+        if (dependencies != ['com.google.code.gson:gson:2.10', 'org.joml:joml:1.10.5'].toSet()) {
+            throw new GradleException('Unexpected core runtime dependency: ' + dependencies)
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyCoreBoundary' }
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}

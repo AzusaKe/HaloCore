@@ -1,0 +1,13 @@
+plugins { id 'java-library'; id 'maven-publish' }
+repositories { mavenCentral() }
+java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; withSourcesJar() }
+tasks.withType(JavaCompile).configureEach { options.release = 17; options.encoding = 'UTF-8' }
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10'
+    implementation 'org.joml:joml:1.10.5'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
+}
+test { useJUnitPlatform() }
+publishing { publications { mavenJava(MavenPublication) { from components.java } } }
+
+apply from: "gradle/boundaries.gradle"
