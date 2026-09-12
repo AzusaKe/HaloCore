@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.0.0 — Unreleased
+## 2.0.0 — 2026-09-13
+
+Accepted with Halo Minecraft 1.20.1 Fabric after automated checks and user game validation.
 
 - Add static OBJ mesh primitives with three-axis size, authored origins and existing group animation/lighting.
 - Add opt-in `preserve_proportions` with uniform primitive `scale`, optional/ignored size and unchanged authored coordinates.

@@ -1,4 +1,4 @@
-# HaloCore 2.0.0 (development)
+# HaloCore 2.0.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -115,8 +115,8 @@ rate promises. The first release targets low-poly decorative geometry.
 
 ## Versioning
 
-Feature version is in `gradle.properties`; mesh development is **2.0.0**, schema **1.1.0**.
-The accepted refactor baseline remains **1.3.1**, schema **1.0.10**; old definitions remain supported.
+Feature version is in `gradle.properties`; the accepted mesh release is **2.0.0**, schema **1.1.0**.
+The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.
 Halo embeds this repository with a Git submodule and resolves `network.azusake:halo-core` using a Gradle
 composite build. Its gitlink, not a moving branch or this version string, pins exact source.
