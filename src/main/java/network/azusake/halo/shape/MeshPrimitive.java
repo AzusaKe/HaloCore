@@ -8,11 +8,20 @@ import network.azusake.halo.core.Vec3d;
 import network.azusake.halo.core.render.MaterialState;
 
 /** Static mesh, transformed and animated by its enclosing group. */
-public record MeshPrimitive(Identifier model, Identifier texture, Vec3d size, Material material) implements HaloPrimitive {
+public record MeshPrimitive(Identifier model, Identifier texture, Vec3d size, Material material,
+                            boolean preserveProportions, double scale) implements HaloPrimitive {
+    /** Compatibility constructor: fit each axis to size, as before. */
+    public MeshPrimitive(Identifier model, Identifier texture, Vec3d size, Material material) {
+        this(model, texture, size, material, false, 1);
+    }
     public MeshPrimitive {
         Objects.requireNonNull(model); Objects.requireNonNull(texture);
-        Objects.requireNonNull(size); Objects.requireNonNull(material);
-        for (double axis : new double[]{size.x, size.y, size.z}) {
+        Objects.requireNonNull(material);
+        if (!preserveProportions) Objects.requireNonNull(size);
+        if (!Float.isFinite((float) scale) || scale < 0) {
+            throw new IllegalArgumentException("mesh.scale must be a finite nonnegative number");
+        }
+        if (size != null) for (double axis : new double[]{size.x, size.y, size.z}) {
             if (!Float.isFinite((float) axis) || axis < 0) throw new IllegalArgumentException("mesh.size must contain finite nonnegative numbers");
         }
     }

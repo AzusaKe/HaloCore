@@ -48,13 +48,16 @@ public final class MeshGeometryRenderer {
             if (effect != null) {
                 var maskTexture = resources.textures().get(effect.texture());
                 if (maskTexture == null) return;
-                if (maskTexture.width() != texture.width() || maskTexture.height() != texture.height()) {
-                    throw new IllegalArgumentException("alpha_mask " + effect.texture() + " must match base texture " + primitive.texture() + " dimensions");
+                if (!maskTexture.hasIntegralScaleWith(texture)) {
+                    throw new IllegalArgumentException("alpha_mask " + effect.texture() + " (" + maskTexture.width() + "x" + maskTexture.height()
+                        + ") and base texture " + primitive.texture() + " (" + texture.width() + "x" + texture.height()
+                        + ") must have equal dimensions or the same integer scale factor on both axes");
                 }
                 mask = effect.evaluate(time);
             }
             boolean blend = alpha < 1 || !texture.opaque() || (mask != null && mask.mode() == MaterialState.MaskMode.LINEAR);
-            Vec3d scale = mesh.scaleTo(primitive.size());
+            Vec3d scale = primitive.preserveProportions()
+                ? new Vec3d(primitive.scale(), primitive.scale(), primitive.scale()) : mesh.scaleTo(primitive.size());
             Matrix4f transform = new Matrix4f(parent).scale((float) scale.x, (float) scale.y, (float) scale.z);
             DrawBatch.Vertex[] vertices = new DrawBatch.Vertex[mesh.vertexCount()];
             var point = new Vector3f();
@@ -92,7 +95,8 @@ public final class MeshGeometryRenderer {
                 translucent.add(new Pending(batch, point.z));
             } else opaque.add(batch);
         } catch (IllegalArgumentException ex) {
-            String message = primitive.model() + " (size " + primitive.size() + "): " + ex.getMessage();
+            String sizing = primitive.preserveProportions() ? "scale " + primitive.scale() : "size " + primitive.size();
+            String message = primitive.model() + " (" + sizing + "): " + ex.getMessage();
             if (warned.add(message)) warning.accept(message);
         }
     }

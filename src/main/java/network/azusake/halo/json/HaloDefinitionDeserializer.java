@@ -332,9 +332,21 @@ public class HaloDefinitionDeserializer implements JsonDeserializer<HaloDefiniti
         Identifier model = requiredResource(obj, "model");
         if (!model.getPath().endsWith(".obj")) throw new JsonParseException("mesh.model must reference an .obj resource");
         Identifier texture = requiredResource(obj, "texture");
-        JsonArray size = obj.getAsJsonArray("size");
-        if (size == null || size.size() != 3) throw new JsonParseException("mesh.size must contain exactly three numbers [x,y,z]");
-        Vec3d dimensions = new Vec3d(size.get(0).getAsDouble(), size.get(1).getAsDouble(), size.get(2).getAsDouble());
+        if (obj.has("preserve_proportions") && (!obj.get("preserve_proportions").isJsonPrimitive()
+                || !obj.getAsJsonPrimitive("preserve_proportions").isBoolean())) {
+            throw new JsonParseException("mesh.preserve_proportions must be a boolean");
+        }
+        boolean preserveProportions = obj.has("preserve_proportions") && obj.get("preserve_proportions").getAsBoolean();
+        if (obj.has("scale") && (!obj.get("scale").isJsonPrimitive() || !obj.getAsJsonPrimitive("scale").isNumber())) {
+            throw new JsonParseException("mesh.scale must be a finite nonnegative number");
+        }
+        double scale = obj.has("scale") ? obj.get("scale").getAsDouble() : 1;
+        Vec3d dimensions = null;
+        if (obj.has("size") || !preserveProportions) {
+            JsonArray size = obj.getAsJsonArray("size");
+            if (size == null || size.size() != 3) throw new JsonParseException("mesh.size must contain exactly three numbers [x,y,z]");
+            dimensions = new Vec3d(size.get(0).getAsDouble(), size.get(1).getAsDouble(), size.get(2).getAsDouble());
+        }
         MeshPrimitive.Material material = MeshPrimitive.Material.DEFAULT;
         if (obj.has("material")) {
             JsonObject mat = obj.getAsJsonObject("material");
@@ -360,7 +372,7 @@ public class HaloDefinitionDeserializer implements JsonDeserializer<HaloDefiniti
             }
             material = new MeshPrimitive.Material(doubleSided, mask);
         }
-        return new MeshPrimitive(model, texture, dimensions, material);
+        return new MeshPrimitive(model, texture, dimensions, material, preserveProportions, scale);
     }
 
     private List<AnimationTerm> parseMeshTerms(JsonObject effect, String axis) {

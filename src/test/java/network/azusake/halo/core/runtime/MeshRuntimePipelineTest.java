@@ -84,6 +84,26 @@ class MeshRuntimePipelineTest {
         assertNull(client.getInstance(ENTITY));
     }
 
+    @Test void authoredSizingFlowsThroughHierarchyAndMaskResourceReloadWithoutReattaching() {
+        String authored = MESH.replace("\"size\":[1,1,0]", "\"preserve_proportions\":true,\"scale\":0.5");
+        var client = client("", "{\"position\":[1,2,3],\"scale\":2,\"children\":["
+            + "{\"position\":[0.5,0,0],\"primitive\":" + authored + "}]}");
+        var instance = client.getInstance(ENTITY);
+        clock.addAndGet(500);
+        for (int width : new int[]{2,8,6,4}) {
+            var assets = new VisualResources(width,ASSETS.meshes(),Map.of(TEX,new VisualResources.TextureInfo(4,4,true),
+                MASK,new VisualResources.TextureInfo(width,width,true)));
+            var batches = client.render(frame(assets));
+            assertSame(instance,client.getInstance(ENTITY));
+            if (width==6) { assertTrue(batches.isEmpty()); continue; }
+            assertEquals(1,batches.size());
+            var batch = batches.get(0); var a = batch.vertices().get(0); var b = batch.vertices().get(1);
+            assertEquals(3,a.x(),1e-5); assertEquals(6.1,a.y(),1e-5); assertEquals(0,a.z(),1e-5);
+            assertEquals(2,b.x()-a.x(),1e-5); assertEquals(4,batch.vertices().get(2).y()-a.y(),1e-5);
+            assertEquals(.125f,mask(batch).offsetU());
+        }
+    }
+
     @Test void missingAssetsAndStateChangesPreserveOwnershipAndDoNotHideLegacySiblings() {
         String legacy = "{\"type\":\"billboard\",\"texture\":\"halo:old.png\",\"size\":[1,1]}";
         var client = client("\"hide_on_sleep\":true,",group(MESH)+","+group(legacy));

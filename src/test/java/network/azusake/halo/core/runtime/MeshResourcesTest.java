@@ -27,9 +27,36 @@ class MeshResourcesTest {
         assertTrue(resources.reload(1, List.of(new ResourceInput(ID, "pack", definition))).isEmpty());
         var mesh = (MeshPrimitive) resources.legacyDefinitions().get(ID).model().groups().get(0).primitives().get(0);
         assertTrue(mesh.material().doubleSided()); assertNull(mesh.material().mask());
+        assertFalse(mesh.preserveProportions()); assertEquals(1, mesh.scale());
         assertEquals(Set.of(MODEL), resources.snapshot().assets().models());
         assertEquals(Set.of(TEXTURE), resources.snapshot().assets().textures());
         assertThrows(UnsupportedOperationException.class, () -> resources.snapshot().assets().models().clear());
+    }
+
+    @Test void authoredScaleModeCanOmitSizeAndRetainsOptionalLegacySize() {
+        String authored = PRIMITIVE.replace("\"size\":[1,1,0]", "\"preserve_proportions\":true");
+        var mesh = parse(authored);
+        assertTrue(mesh.preserveProportions()); assertEquals(1, mesh.scale()); assertNull(mesh.size());
+        mesh = parse(authored.replace("true", "true,\"scale\":0.25,\"size\":[7,8,9]"));
+        assertEquals(.25, mesh.scale()); assertEquals(7, mesh.size().x);
+        assertEquals(0, parse(authored.replace("true", "true,\"scale\":0")).scale());
+        var fitted = parse(PRIMITIVE.replace("\"size\":", "\"preserve_proportions\":false,\"scale\":2,\"size\":"));
+        assertFalse(fitted.preserveProportions()); assertEquals(2, fitted.scale());
+    }
+
+    @Test void invalidSizingFieldsAreReportedAsDefinitionErrors() {
+        for (String fields : List.of("\"preserve_proportions\":false", "\"scale\":1",
+                "\"preserve_proportions\":\"true\"", "\"preserve_proportions\":null",
+                "\"preserve_proportions\":1", "\"preserve_proportions\":[]",
+                "\"preserve_proportions\":true,\"scale\":-1", "\"preserve_proportions\":true,\"scale\":1e999",
+                "\"preserve_proportions\":true,\"scale\":1e99", "\"preserve_proportions\":true,\"scale\":[1,1,1]",
+                "\"preserve_proportions\":true,\"scale\":\"1\"", "\"preserve_proportions\":true,\"scale\":null",
+                "\"preserve_proportions\":true,\"scale\":false", "\"preserve_proportions\":true,\"size\":[-1,1,1]")) {
+            var resources = new DefinitionResources();
+            var errors = resources.reload(1, List.of(new ResourceInput(ID, "bad-sizing",
+                definition(PRIMITIVE.replace("\"size\":[1,1,0]", fields)))));
+            assertEquals(1, errors.size(), fields); assertTrue(resources.snapshot().ids().isEmpty());
+        }
     }
 
     @Test void maskParsesSharedTermsAndWrapsOffsetsWithoutClampingMotion() {

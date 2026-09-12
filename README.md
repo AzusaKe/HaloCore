@@ -89,6 +89,10 @@ the old constructor. `MaterialState.Mesh` requests base-texture rendering with a
 nearest repeating level-zero sampling, ignoring mask alpha and applying no sRGB conversion. LINEAR uses
 the gray value; STEP uses `gray >= threshold`. Multiply the result by base texture alpha and batch alpha
 exactly once, discarding only final alpha <= 0. Never substitute the legacy 0.1 cutoff.
+Base/mask dimensions may match or differ by one uniform positive integer factor in either direction,
+as checked by `TextureInfo.hasIntegralScaleWith`. Each texture keeps its native resolution in the same
+normalized UV domain. Nearest sampling replicates smaller pixels on the larger grid without discarding
+high-resolution mask details; do not downsample or create enlarged texture copies.
 
 Core submits old primitives in their original order, then depth-writing meshes, then transparent meshes
 sorted by instance center and triangle center in view-space depth. Honor each batch's depth/blend/cull
@@ -98,7 +102,12 @@ platform independent; shader programs and GPU resource lifetimes belong exclusiv
 
 Mesh `size:[x,y,z]` fits the authored bounds in blocks by axis, without moving the exported origin or
 changing axes. Group transforms apply afterwards. Zero source extent requires target size=0 and uses
-scale=1 on that axis. UV V is flipped only by OBJ import. The parser supports textured triangles and
+scale=1 on that axis. Optional primitive `preserve_proportions` defaults to false. When true, `size` may
+be omitted and is ignored; primitive `scale` (default 1, finite nonnegative scalar) uniformly multiplies
+authored coordinates about their origin before group transforms, with no bounds fitting or zero-extent
+restriction. When false, primitive `scale` has no effect. Supplied size/scale fields are still validated.
+The old four-argument `MeshPrimitive` constructor retains the size-fitting behavior.
+UV V is flipped only by OBJ import. The parser supports textured triangles and
 planar convex quads, positive/negative independent indices and optional normals. MTL and names are
 ignored; unsupported polygons require export-time triangulation. Limits are 16 MiB text, 1,000,000
 declared position/UV/normal elements combined, and 250,000 triangles; these are load guards, not frame

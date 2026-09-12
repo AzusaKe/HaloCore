@@ -13,5 +13,13 @@ public record VisualResources(long generation, Map<Identifier, TriangleMesh> mes
         public TextureInfo {
             if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid texture dimensions");
         }
+        /** Same dimensions, or a uniform integer enlargement in either direction. */
+        public boolean hasIntegralScaleWith(TextureInfo other) {
+            return integralScale(width, height, other.width, other.height)
+                || integralScale(other.width, other.height, width, height);
+        }
+        private static boolean integralScale(int w, int h, int smallW, int smallH) {
+            return w % smallW == 0 && h % smallH == 0 && w / smallW == h / smallH;
+        }
     }
 }

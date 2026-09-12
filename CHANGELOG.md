@@ -3,6 +3,8 @@
 ## 2.0.0 — Unreleased
 
 - Add static OBJ mesh primitives with three-axis size, authored origins and existing group animation/lighting.
+- Add opt-in `preserve_proportions` with uniform primitive `scale`, optional/ignored size and unchanged authored coordinates.
+- Accept uniformly integer-scaled base/mask dimensions in either direction; retain native-resolution mask detail.
 - Add mesh-only alpha masks, LINEAR/STEP transfer, thresholds, and summed U/V animation terms on the existing idle clock.
 - Add immutable indexed `TriangleMesh`, visual resource dependencies and a per-generation loading cache.
 - Extend `FrameScene` with `VisualResources` and `DrawBatch` with typed material state; retain old constructors.
