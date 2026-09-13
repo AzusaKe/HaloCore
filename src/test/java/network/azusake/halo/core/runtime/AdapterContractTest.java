@@ -50,7 +50,8 @@ class AdapterContractTest {
 
     @Test void stablePortSignaturesDoNotExposeMathOrJsonLibraries() {
         for (Class<?> type : List.of(ClientPort.class, ResourceInput.class, DefinitionSnapshot.class,
-                BodyPose.class, FrameScene.class, DrawBatch.class, RuntimeConfigSnapshot.class,
+                BodyPose.class, FrameScene.class, FrameOutput.class, DrawBatch.class, MeshDraw.class,
+                MeshIndexWriter.class, RuntimeConfigSnapshot.class,
                 TriangleMesh.class, VisualResources.class, VisualResources.TextureInfo.class,
                 MaterialState.class, MaterialState.Mesh.class, MaterialState.AlphaMask.class,
                 DefinitionSnapshot.AssetDependencies.class, VisualAssetLoader.class, VisualAssetLoader.Source.class,

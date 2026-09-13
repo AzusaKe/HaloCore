@@ -1,4 +1,4 @@
-# HaloCore 2.0.0
+# HaloCore 2.1.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -20,7 +20,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Client | `ClientPort` implemented by one `ClientRuntime` per logical client |
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
 | Frame input | `FrameScene`, entity/camera samples, light and texture lookup callbacks |
-| Frame output | ordered `DrawBatch` values; `BodyPose` observations before visual animation |
+| Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
 | External anchors | unchanged `network.azusake.halo.api.v2` |
 | Config/diagnostics | `RuntimeConfigSnapshot`, `ClientStatus`, `Diagnostics.Sink` |
 
@@ -63,14 +63,14 @@ for hosts that only need diagnostic logging. Callbacks must not mutate the runti
 - The host supplies a column-major 4×4 root view transform. Core subtracts the camera position using
   doubles before float matrix transforms. It then applies body translation/rotation/scale, definition
   animation T/R/S, and each group's local T/R/S followed by group animation or transition T/R/S.
-- `DrawBatch` vertices are already in the supplied view space. Do not apply camera/body transforms
-  again. Consume batches and vertices in order. Bind the given texture, tint, blend, culling, depth-test
+- Legacy `DrawBatch` vertices are already in the supplied view space. `MeshDraw` instead retains authored
+  indexed geometry and supplies a column-major local-to-view transform. Consume both lists in order. Bind the given texture, tint, blend, culling, depth-test
   and depth-write state; `blend=true` uses the existing standard alpha blend. Light is sampled in world
   space and emission is already included in the output color. Billboard/ring UV conventions are unchanged.
 - Light/texture callbacks are read-only facts for the frame. Millisecond time is shared across animation
   stages; nanosecond deltas drive the retained EMA and damping clamp. Fake clocks enable replay tests.
 
-## Mesh adapter contract (2.0.0)
+## Mesh adapter contract (2.1.0)
 
 `DefinitionSnapshot.assets()` exposes the deduplicated model and texture IDs required by mesh primitives.
 `VisualAssetLoader` accepts a host `Source` for OBJ text and decoded texture metadata; create a new loader
@@ -89,16 +89,17 @@ the old constructor. `MaterialState.Mesh` requests base-texture rendering with a
 nearest repeating level-zero sampling, ignoring mask alpha and applying no sRGB conversion. LINEAR uses
 the gray value; STEP uses `gray >= threshold`. Multiply the result by base texture alpha and batch alpha
 exactly once, discarding only final alpha <= 0. Never substitute the legacy 0.1 cutoff.
-Base/mask dimensions may match or differ by one uniform positive integer factor in either direction,
-as checked by `TextureInfo.hasIntegralScaleWith`. Each texture keeps its native resolution in the same
-normalized UV domain. Nearest sampling replicates smaller pixels on the larger grid without discarding
-high-resolution mask details; do not downsample or create enlarged texture copies.
+Base/mask dimensions and aspect ratios are independent. Each texture keeps its native resolution in the
+same normalized UV domain; do not downsample or create enlarged texture copies. The retained
+`TextureInfo.hasIntegralScaleWith` method is informational compatibility API, not a render-validity rule.
 
 Core submits old primitives in their original order, then depth-writing meshes, then transparent meshes
-sorted by instance center and triangle center in view-space depth. Honor each batch's depth/blend/cull
-flags and preserve ordering. Transparency sorting is approximate for intersecting geometry and is not
-a global sort with the host world's translucent surfaces. Geometry, brightness and animation rules are
-platform independent; shader programs and GPU resource lifetimes belong exclusively to the host.
+sorted by instance center. Hosts use one reusable `MeshIndexWriter` per cached mesh to preserve stable
+back-to-front triangle-center ordering and mirrored winding. Honor each command's depth/blend/cull flags.
+`ClientPort.renderFrame` exposes this path; the original `render` expands meshes for compatibility.
+Transparency sorting is not global with the host world's translucent surfaces. Geometry, brightness,
+animation and index ordering are platform independent; shader programs and GPU resource lifetimes belong
+exclusively to the host.
 
 Mesh `size:[x,y,z]` fits the authored bounds in blocks by axis, without moving the exported origin or
 changing axes. Group transforms apply afterwards. Zero source extent requires target size=0 and uses
@@ -111,11 +112,13 @@ UV V is flipped only by OBJ import. The parser supports textured triangles and
 planar convex quads, positive/negative independent indices and optional normals. MTL and names are
 ignored; unsupported polygons require export-time triangulation. Limits are 16 MiB text, 1,000,000
 declared position/UV/normal elements combined, and 250,000 triangles; these are load guards, not frame
-rate promises. The first release targets low-poly decorative geometry.
+rate promises. Adapters should cache indexed vertex geometry by visual-resource generation; a host that
+uses the compatibility expansion path still pays per-frame transformation and upload costs.
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the accepted mesh release is **2.0.0**, schema **1.1.0**.
+Feature version is in `gradle.properties`; the current release is **2.1.0**, schema **1.1.0**.
+The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.
 Halo embeds this repository with a Git submodule and resolves `network.azusake:halo-core` using a Gradle

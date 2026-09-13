@@ -18,5 +18,9 @@ public interface ClientPort {
     void clear();
     Map<UUID, Identifier> assignments();
     List<DrawBatch> render(FrameScene frame);
+    /** Cached-mesh capable adapters should consume this lightweight output. */
+    default FrameOutput renderFrame(FrameScene frame) {
+        return new FrameOutput(frame.visuals().generation(), render(frame), List.of());
+    }
     Map<UUID, BodyPose> bodyPoses();
 }

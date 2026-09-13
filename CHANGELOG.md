@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 — 2026-09-13
+
+- Accept arbitrary positive base/mask dimensions and aspect ratios in the shared normalized UV domain.
+- Add lightweight `FrameOutput` / `MeshDraw` commands so adapters can retain indexed mesh geometry instead of expanding it every frame.
+- Add reusable, stable back-to-front `MeshIndexWriter` sorting without per-frame workspace allocation.
+- Keep `ClientPort.render`, `DrawBatch`, schema 1.1.0, storage, protocol and anchor API v2 compatible.
+
 ## 2.0.0 — 2026-09-13
 
 Accepted with Halo Minecraft 1.20.1 Fabric after automated checks and user game validation.

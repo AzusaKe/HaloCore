@@ -78,7 +78,7 @@ public final class ClientRuntime implements ClientPort {
         return Map.copyOf(result);
     }
     public SceneRenderer renderer() { return renderer; }
-    public List<DrawBatch> render(FrameScene scene) {
+    private FrameOutput produceFrame(FrameScene scene) {
         frameTime=scene.timeMillis();
         try {
             if(worldToken!=scene.worldToken()) {
@@ -98,6 +98,10 @@ public final class ClientRuntime implements ClientPort {
             });
             return renderer.renderHalos(scene);
         } finally { frameTime=null; }
+    }
+    @Override public FrameOutput renderFrame(FrameScene scene) { return produceFrame(scene); }
+    @Override public List<DrawBatch> render(FrameScene scene) {
+        return produceFrame(scene).expandedBatches(scene.visuals());
     }
     public HaloInstance getHaloInstance(UUID uuid) { return getInstance(uuid); }
     public void putClientHalo(UUID uuid,Identifier id) { attach(uuid,id,false); }

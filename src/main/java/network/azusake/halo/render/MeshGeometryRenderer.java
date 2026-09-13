@@ -1,27 +1,27 @@
 package network.azusake.halo.render;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.joml.Matrix4f;
-import org.joml.Vector3f;
 import network.azusake.halo.core.Vec3d;
 import network.azusake.halo.core.render.DrawBatch;
+import network.azusake.halo.core.render.FrameOutput;
 import network.azusake.halo.core.render.MaterialState;
+import network.azusake.halo.core.render.MeshDraw;
 import network.azusake.halo.core.render.TriangleMesh;
 import network.azusake.halo.core.render.VisualResources;
 import network.azusake.halo.shape.MeshPrimitive;
 
 /** Internal geometry stage: keep old primitives ordered, then opaque and depth-sorted mesh draws. */
 public final class MeshGeometryRenderer {
-    private record Pending(DrawBatch batch, float depth) {}
+    private record Pending(MeshDraw draw, float depth) {}
     private final Consumer<String> warning;
     private final Set<String> warned = new HashSet<>();
-    private final List<DrawBatch> opaque = new ArrayList<>();
+    private final List<MeshDraw> opaque = new ArrayList<>();
     private final List<Pending> translucent = new ArrayList<>();
     private VisualResources resources = VisualResources.EMPTY;
     private long warningGeneration = Long.MIN_VALUE;
@@ -48,52 +48,26 @@ public final class MeshGeometryRenderer {
             if (effect != null) {
                 var maskTexture = resources.textures().get(effect.texture());
                 if (maskTexture == null) return;
-                if (!maskTexture.hasIntegralScaleWith(texture)) {
-                    throw new IllegalArgumentException("alpha_mask " + effect.texture() + " (" + maskTexture.width() + "x" + maskTexture.height()
-                        + ") and base texture " + primitive.texture() + " (" + texture.width() + "x" + texture.height()
-                        + ") must have equal dimensions or the same integer scale factor on both axes");
-                }
                 mask = effect.evaluate(time);
             }
             boolean blend = alpha < 1 || !texture.opaque() || (mask != null && mask.mode() == MaterialState.MaskMode.LINEAR);
             Vec3d scale = primitive.preserveProportions()
                 ? new Vec3d(primitive.scale(), primitive.scale(), primitive.scale()) : mesh.scaleTo(primitive.size());
             Matrix4f transform = new Matrix4f(parent).scale((float) scale.x, (float) scale.y, (float) scale.z);
-            DrawBatch.Vertex[] vertices = new DrawBatch.Vertex[mesh.vertexCount()];
-            var point = new Vector3f();
-            for (int i = 0; i < vertices.length; i++) {
-                transform.transformPosition(mesh.x(i), mesh.y(i), mesh.z(i), point);
-                if (!Float.isFinite(point.x) || !Float.isFinite(point.y) || !Float.isFinite(point.z)) {
-                    throw new IllegalArgumentException("Model transform produced non-finite vertices");
-                }
-                vertices[i] = new DrawBatch.Vertex(point.x, point.y, point.z, mesh.u(i), mesh.v(i), brightness, brightness, brightness, 1);
-            }
-            long[] order = new long[mesh.triangleCount()];
-            for (int triangle = 0; triangle < order.length; triangle++) {
-                int base = triangle * 3;
-                float z = (float) (((double) vertices[mesh.index(base)].z() + vertices[mesh.index(base + 1)].z()
-                    + vertices[mesh.index(base + 2)].z()) / 3);
-                // Signed integer ordering equivalent to float ordering; low bits break ties by source order.
-                int bits = Float.floatToIntBits(z);
-                int key = bits ^ ((bits >> 31) & 0x7fffffff);
-                order[triangle] = ((long) key << 32) | (triangle & 0xffffffffL);
-            }
-            if (blend) Arrays.sort(order); // Camera looks down -Z: more negative is farther away.
-            var ordered = new ArrayList<DrawBatch.Vertex>(order.length * 3);
-            boolean mirrored = transform.determinant() < 0;
-            for (long entry : order) {
-                int base = (int) entry * 3;
-                ordered.add(vertices[mesh.index(base)]);
-                ordered.add(vertices[mesh.index(base + (mirrored ? 2 : 1))]);
-                ordered.add(vertices[mesh.index(base + (mirrored ? 1 : 2))]);
-            }
-            DrawBatch batch = new DrawBatch(DrawBatch.Topology.TRIANGLES, ordered, primitive.texture(), true,
-                !primitive.material().doubleSided(), blend, true, !blend, 1, 1, 1, alpha, new MaterialState.Mesh(mask));
+            float determinant = transform.determinant();
+            if (!Float.isFinite(determinant)) throw new IllegalArgumentException("Model transform produced non-finite vertices");
+            boolean mirrored = determinant < 0;
+            float[] matrix = transform.get(new float[16]);
+            validateBounds(mesh, matrix);
+            MeshDraw draw = new MeshDraw(primitive.model(), primitive.texture(), matrix,
+                !primitive.material().doubleSided(), blend, true, !blend,
+                brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask));
             if (blend) {
                 Vec3d center = mesh.center();
-                transform.transformPosition((float) center.x, (float) center.y, (float) center.z, point);
-                translucent.add(new Pending(batch, point.z));
-            } else opaque.add(batch);
+                float depth = matrix[2] * (float) center.x + matrix[6] * (float) center.y
+                    + matrix[10] * (float) center.z + matrix[14];
+                translucent.add(new Pending(draw, depth));
+            } else opaque.add(draw);
         } catch (IllegalArgumentException ex) {
             String sizing = primitive.preserveProportions() ? "scale " + primitive.scale() : "size " + primitive.size();
             String message = primitive.model() + " (" + sizing + "): " + ex.getMessage();
@@ -101,12 +75,26 @@ public final class MeshGeometryRenderer {
         }
     }
 
-    public List<DrawBatch> finish(List<DrawBatch> legacy) {
-        if (opaque.isEmpty() && translucent.isEmpty()) return legacy;
-        var result = new ArrayList<DrawBatch>(legacy.size() + opaque.size() + translucent.size());
-        result.addAll(legacy); result.addAll(opaque);
+    private static void validateBounds(TriangleMesh mesh, float[] m) {
+        Vec3d min = mesh.minimum(), max = mesh.maximum();
+        for (int xi = 0; xi < 2; xi++) for (int yi = 0; yi < 2; yi++)
+            for (int zi = 0; zi < 2; zi++) {
+                double x = xi == 0 ? min.x : max.x;
+                double y = yi == 0 ? min.y : max.y;
+                double z = zi == 0 ? min.z : max.z;
+                float tx = m[0] * (float) x + m[4] * (float) y + m[8] * (float) z + m[12];
+                float ty = m[1] * (float) x + m[5] * (float) y + m[9] * (float) z + m[13];
+                float tz = m[2] * (float) x + m[6] * (float) y + m[10] * (float) z + m[14];
+                if (!Float.isFinite(tx) || !Float.isFinite(ty) || !Float.isFinite(tz))
+                    throw new IllegalArgumentException("Model transform produced non-finite vertices");
+            }
+    }
+
+    public FrameOutput finish(List<DrawBatch> legacy) {
+        var meshes = new ArrayList<MeshDraw>(opaque.size() + translucent.size());
+        meshes.addAll(opaque);
         translucent.sort(Comparator.comparingDouble(Pending::depth));
-        for (Pending pending : translucent) result.add(pending.batch());
-        return List.copyOf(result);
+        for (Pending pending : translucent) meshes.add(pending.draw());
+        return new FrameOutput(resources.generation(), legacy, meshes);
     }
 }

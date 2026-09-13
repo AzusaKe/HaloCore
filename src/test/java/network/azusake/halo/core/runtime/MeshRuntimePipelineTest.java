@@ -45,6 +45,20 @@ class MeshRuntimePipelineTest {
     private static String group(String mesh) { return "{\"primitive\":" + mesh + "}"; }
     private static MaterialState.AlphaMask mask(DrawBatch batch) { return ((MaterialState.Mesh)batch.material()).mask(); }
 
+    @Test void optimizedFrameKeepsMeshLocalAndCompatibilityExpansionMatchesLegacyContract() {
+        var client = client("", group(MESH));
+        FrameOutput output = client.renderFrame(frame(ASSETS));
+        assertTrue(output.legacyBatches().isEmpty()); assertEquals(1, output.meshes().size());
+        MeshDraw draw = output.meshes().get(0);
+        assertEquals(16, draw.localToView().length);
+        assertEquals(MODEL, draw.model());
+        var expanded = output.expandedBatches(ASSETS);
+        assertEquals(3, expanded.get(0).vertices().size());
+        assertEquals(draw.red(), expanded.get(0).vertices().get(0).red());
+        float[] copy = draw.localToView(); copy[0] = 999;
+        assertNotEquals(999, draw.transform(0));
+    }
+
     @Test void hierarchyAnimationAndLightMultiplyExactlyOnceAndLargeCoordinatesRemainStable() {
         String extra = "\"animation\":{\"alpha\":[{\"function\":\"linear\",\"start\":0.5,\"speed\":0}],"
             + "\"glow\":[{\"function\":\"linear\",\"start\":0.5,\"speed\":0}]},";
@@ -95,7 +109,6 @@ class MeshRuntimePipelineTest {
                 MASK,new VisualResources.TextureInfo(width,width,true)));
             var batches = client.render(frame(assets));
             assertSame(instance,client.getInstance(ENTITY));
-            if (width==6) { assertTrue(batches.isEmpty()); continue; }
             assertEquals(1,batches.size());
             var batch = batches.get(0); var a = batch.vertices().get(0); var b = batch.vertices().get(1);
             assertEquals(3,a.x(),1e-5); assertEquals(6.1,a.y(),1e-5); assertEquals(0,a.z(),1e-5);

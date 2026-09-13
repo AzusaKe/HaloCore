@@ -129,7 +129,7 @@ public final class SceneRenderer {
     /**
      * Render every visible halo for the current frame.
      */
-    public List<DrawBatch> renderHalos(FrameScene scene) {
+    public FrameOutput renderHalos(FrameScene scene) {
         bodyPoses.clear();
         this.scene = scene;
         this.draw = new GeometryCollector(scene.textures());

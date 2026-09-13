@@ -13,7 +13,8 @@ public record VisualResources(long generation, Map<Identifier, TriangleMesh> mes
         public TextureInfo {
             if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid texture dimensions");
         }
-        /** Same dimensions, or a uniform integer enlargement in either direction. */
+        /** Legacy informational helper; mesh masks no longer require an integral scale relationship. */
+        @Deprecated(forRemoval = false)
         public boolean hasIntegralScaleWith(TextureInfo other) {
             return integralScale(width, height, other.width, other.height)
                 || integralScale(other.width, other.height, width, height);
