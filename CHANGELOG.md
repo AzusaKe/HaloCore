@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.1 — Unreleased
+
+- Restore case-insensitive namespace-prefix matching for halo identifiers while retaining path-prefix matching.
+- Keep definition formats, storage, protocol, schema 1.1.0 and anchor API v2 unchanged.
+
 ## 2.1.0 — 2026-09-13
 
 - Accept arbitrary positive base/mask dimensions and aspect ratios in the shared normalized UV domain.
