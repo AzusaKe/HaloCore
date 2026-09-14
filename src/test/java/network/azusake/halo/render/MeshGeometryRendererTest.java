@@ -35,6 +35,22 @@ class MeshGeometryRendererTest {
         assertEquals(9, v.x(),1e-5); assertEquals(20.5, v.y(),1e-5); assertEquals(29.5,v.z(),1e-5);
         assertEquals(.7f,v.red()); assertEquals(1,batch.alpha()); assertTrue(batch.depthWrite()); assertFalse(batch.blend()); assertTrue(batch.cull());
     }
+
+    @Test void compatibilityExpansionUsesInverseTransposeForNormals() {
+        var mesh = new TriangleMesh(new float[]{0,0,0, 1,0,0, 0,1,0},
+            new float[]{0,0, 1,0, 0,1}, new float[]{1,1,0, 1,1,0, 1,1,0}, new int[]{0,1,2});
+        var assets = new VisualResources(1, Map.of(MODEL, mesh),
+            Map.of(TEX, new VisualResources.TextureInfo(4,4,true)));
+        var renderer = new MeshGeometryRenderer(message -> fail(message)); renderer.begin(assets);
+        renderer.add(new MeshPrimitive(MODEL,TEX,null,MeshPrimitive.Material.DEFAULT,true,1),
+            new Matrix4f().scale(2,1,1), 1,1,0, new LightSample(4,9), true);
+        var batch = renderer.finish(List.of()).expandedBatches(assets).get(0);
+        var normal = batch.vertices().get(0);
+        assertTrue(batch.directionalLighting());
+        assertEquals(0.4472136f, normal.normalX(), 1e-5);
+        assertEquals(0.8944272f, normal.normalY(), 1e-5);
+        assertEquals(0, normal.normalZ(), 1e-5);
+    }
     @Test void transparentInstancesAndTheirTrianglesAreDepthSortedWithoutReorderingLegacy() {
         var resources = resources(1,true,4);
         var renderer = new MeshGeometryRenderer(failMessage -> fail(failMessage)); renderer.begin(resources);

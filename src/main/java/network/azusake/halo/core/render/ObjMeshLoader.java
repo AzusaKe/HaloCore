@@ -49,12 +49,13 @@ public final class ObjMeshLoader {
         return new IllegalArgumentException(resource + ":" + line + ": " + message);
     }
 
-    private record Corner(int position, int uv) {}
+    private record Corner(int position, int uv, int normal, int generatedNormal) {}
     private static final class Parser {
         private final Identifier resource;
         private final List<float[]> positions = new ArrayList<>();
         private final List<float[]> uvs = new ArrayList<>();
-        private int normalCount;
+        private final List<float[]> normals = new ArrayList<>();
+        private final List<float[]> generatedNormals = new ArrayList<>();
         private final Map<Corner, Integer> vertices = new HashMap<>();
         private final List<Corner> corners = new ArrayList<>();
         private final List<Integer> indices = new ArrayList<>();
@@ -79,14 +80,19 @@ public final class ObjMeshLoader {
                     }
                     case "vn" -> {
                         if (words.length != 4) throw new IllegalArgumentException("vn requires x y z");
-                        for (int i = 1; i < 4; i++) finite(words[i]);
-                        normalCount++; // Accepted and validated; v1 uses Halo's uniform brightness.
+                        float x = finite(words[1]), y = finite(words[2]), z = finite(words[3]);
+                        double length = Math.sqrt((double) x * x + (double) y * y + (double) z * z);
+                        // Some exporters write indexed zero normals. They were harmless while Halo ignored vn;
+                        // retain the index slot and generate the referencing face's normal instead of dropping
+                        // an otherwise valid pre-existing mesh.
+                        normals.add(length > 1.0e-8
+                            ? new float[]{(float) (x / length), (float) (y / length), (float) (z / length)} : null);
                     }
                     case "f" -> face(words);
                     case "o", "g", "s", "usemtl", "mtllib" -> { /* Names do not change the JSON material. */ }
                     default -> throw new IllegalArgumentException("Unsupported OBJ statement '" + words[0] + "'; export textured triangles");
                 }
-                if ((long) positions.size() + uvs.size() + normalCount > MAX_ELEMENTS
+                if ((long) positions.size() + uvs.size() + normals.size() + generatedNormals.size() > MAX_ELEMENTS
                         || indices.size() / 3 > MAX_TRIANGLES) throw new IllegalArgumentException("OBJ exceeds geometry limits");
             } catch (IllegalArgumentException ex) {
                 throw problem(resource, number, ex.getMessage());
@@ -103,20 +109,27 @@ public final class ObjMeshLoader {
                     throw new IllegalArgumentException("Every face corner requires a UV (v/vt or v/vt/vn)");
                 }
                 int p = index(reference[0], positions.size()), uv = index(reference[1], uvs.size());
-                if (reference.length == 3) index(reference[2], normalCount);
-                face[i] = new Corner(p, uv);
+                int normal = reference.length == 3 ? index(reference[2], normals.size()) : -1;
+                if (normal >= 0 && normals.get(normal) == null) normal = -1;
+                face[i] = new Corner(p, uv, normal, -1);
             }
-            validatePolygon(face);
+            float[] faceNormal = validatePolygon(face);
+            int generatedNormal = -1;
+            for (Corner corner : face) if (corner.normal() < 0) {
+                if (generatedNormal < 0) { generatedNormal = generatedNormals.size(); generatedNormals.add(faceNormal); }
+                break;
+            }
             int[] mapped = new int[count];
             for (int i = 0; i < count; i++) {
                 Corner corner = face[i];
+                if (corner.normal() < 0) corner = new Corner(corner.position(), corner.uv(), -1, generatedNormal);
                 mapped[i] = vertices.computeIfAbsent(corner, key -> { corners.add(key); return corners.size() - 1; });
             }
             indices.add(mapped[0]); indices.add(mapped[1]); indices.add(mapped[2]);
             if (count == 4) { indices.add(mapped[0]); indices.add(mapped[2]); indices.add(mapped[3]); }
         }
 
-        private void validatePolygon(Corner[] face) {
+        private float[] validatePolygon(Corner[] face) {
             double[][] p = new double[face.length][3];
             for (int i = 0; i < face.length; i++) {
                 float[] v = positions.get(face[i].position());
@@ -127,7 +140,7 @@ public final class ObjMeshLoader {
             double extent = 0;
             for (int i = 1; i < p.length; i++) extent = Math.max(extent, Math.sqrt(dot(subtract(p[i], p[0]), subtract(p[i], p[0]))));
             if (length <= extent * extent * 1e-10) throw new IllegalArgumentException("Degenerate face");
-            if (face.length == 3) return;
+            if (face.length == 3) return unit(normal, length);
             if (Math.abs(dot(normal, subtract(p[3], p[0]))) > length * extent * 1e-5) {
                 throw new IllegalArgumentException("Non-planar quad; triangulate on export");
             }
@@ -138,18 +151,26 @@ public final class ObjMeshLoader {
                     throw new IllegalArgumentException("Concave, crossing or degenerate quad; triangulate on export");
                 }
             }
+            return unit(normal, length);
         }
 
         private TriangleMesh finish() {
-            float[] p = new float[corners.size() * 3], uv = new float[corners.size() * 2];
+            float[] p = new float[corners.size() * 3], uv = new float[corners.size() * 2], n = new float[corners.size() * 3];
             for (int i = 0; i < corners.size(); i++) {
                 Corner corner = corners.get(i);
                 System.arraycopy(positions.get(corner.position()), 0, p, i * 3, 3);
                 System.arraycopy(uvs.get(corner.uv()), 0, uv, i * 2, 2);
+                float[] normal = corner.normal() >= 0
+                    ? normals.get(corner.normal()) : generatedNormals.get(corner.generatedNormal());
+                System.arraycopy(normal, 0, n, i * 3, 3);
             }
             int[] triangles = new int[indices.size()];
             for (int i = 0; i < triangles.length; i++) triangles[i] = indices.get(i);
-            return new TriangleMesh(p, uv, triangles);
+            return new TriangleMesh(p, uv, n, triangles);
+        }
+
+        private static float[] unit(double[] normal, double length) {
+            return new float[]{(float) (normal[0] / length), (float) (normal[1] / length), (float) (normal[2] / length)};
         }
     }
 

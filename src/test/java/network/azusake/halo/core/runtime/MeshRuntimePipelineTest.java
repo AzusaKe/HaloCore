@@ -96,6 +96,8 @@ class MeshRuntimePipelineTest {
         FrameOutput ambient = client("", groups).renderFrame(frame(ASSETS, new LightSample(3, 12)));
         assertEquals(new LightSample(3, 12), ambient.meshes().get(0).light());
         assertEquals(new LightSample(3, 12), ambient.legacyBatches().get(0).light());
+        assertTrue(ambient.meshes().get(0).directionalLighting());
+        assertTrue(ambient.legacyBatches().get(0).directionalLighting());
         assertEquals(1, ambient.meshes().get(0).red());
         assertEquals(1, ambient.legacyBatches().get(0).vertices().get(0).red());
         assertEquals(new LightSample(3, 12), ambient.expandedBatches(ASSETS).get(1).light());
@@ -103,6 +105,7 @@ class MeshRuntimePipelineTest {
         String glow = "\"animation\":{\"glow\":[{\"function\":\"linear\",\"start\":0.5,\"speed\":0}]},";
         FrameOutput emissive = client(glow, group(MESH)).renderFrame(frame(ASSETS, new LightSample(0, 0)));
         assertEquals(LightSample.FULL_BRIGHT, emissive.meshes().get(0).light());
+        assertFalse(emissive.meshes().get(0).directionalLighting());
         assertEquals(.5f, emissive.meshes().get(0).red(), 1e-6);
     }
 

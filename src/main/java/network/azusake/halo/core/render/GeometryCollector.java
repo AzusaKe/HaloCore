@@ -15,6 +15,7 @@ public final class GeometryCollector {
     private boolean textured, cull=true, blend, depthTest=true, depthWrite=true;
     private float red=1,green=1,blue=1,alpha=1;
     private LightSample light = LightSample.UNAVAILABLE;
+    private boolean directionalLighting;
     public GeometryCollector(FrameScene.TextureLookup textures) { this.textures=textures; }
     public List<DrawBatch> batches() { return List.copyOf(batches); }
     public Builder getBuffer() { return builder; }
@@ -30,15 +31,16 @@ public final class GeometryCollector {
     public void depthMask(boolean value) { depthWrite=value; }
     public void setShaderColor(float r,float g,float b,float a) { red=r;green=g;blue=b;alpha=a; }
     public void setLight(LightSample value) { light=java.util.Objects.requireNonNull(value); }
+    public void setDirectionalLighting(boolean value) { directionalLighting=value; }
     public void draw() {
         batches.add(new DrawBatch(builder.topology,builder.vertices,texture,textured,cull,blend,
-            depthTest,depthWrite,red,green,blue,alpha,MaterialState.LEGACY,light));
+            depthTest,depthWrite,red,green,blue,alpha,MaterialState.LEGACY,light,directionalLighting));
         builder.vertices.clear();
     }
     public final class Builder {
         private final List<DrawBatch.Vertex> vertices = new ArrayList<>();
         private DrawBatch.Topology topology;
-        private float x,y,z,u,v,r=1,g=1,b=1,a=1;
+        private float x,y,z,u,v,r=1,g=1,b=1,a=1,nx=0,ny=-1,nz=0;
         public void begin(DrawBatch.Topology topology,boolean withTexture) {
             this.topology=topology; textured=withTexture; vertices.clear();
         }
@@ -48,6 +50,12 @@ public final class GeometryCollector {
         }
         public Builder texture(float u,float v) { this.u=u;this.v=v;return this; }
         public Builder color(float r,float g,float b,float a) { this.r=r;this.g=g;this.b=b;this.a=a;return this; }
-        public void next() { vertices.add(new DrawBatch.Vertex(x,y,z,u,v,r,g,b,a)); }
+        public Builder normal(float x,float y,float z) {
+            float length=(float)Math.sqrt(x*x+y*y+z*z);
+            if (Float.isFinite(length) && length>1.0e-8f) { nx=x/length;ny=y/length;nz=z/length; }
+            else { nx=0;ny=-1;nz=0; }
+            return this;
+        }
+        public void next() { vertices.add(new DrawBatch.Vertex(x,y,z,u,v,r,g,b,a,nx,ny,nz)); }
     }
 }

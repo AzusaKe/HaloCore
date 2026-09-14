@@ -26,6 +26,29 @@ class MeshIndexWriterTest {
         assertArrayEquals(new int[]{0,2,1,3,5,4}, mirrored.array());
     }
 
+    @Test void writesTriangleCornerIndicesForExpandedVertexStreams() {
+        var mesh = new TriangleMesh(new float[]{0,0,-1, 1,0,-1, 0,1,-1, 1,1,-2},
+            new float[]{0,0,1,0,0,1,1,1}, new int[]{2,0,1, 1,3,2});
+        var writer = new MeshIndexWriter(mesh);
+        var normal = IntBuffer.allocate(6);
+        writer.writeExpandedSourceOrder(normal, false);
+        assertArrayEquals(new int[]{0,1,2,3,4,5}, normal.array());
+        var mirrored = IntBuffer.allocate(6);
+        writer.writeExpanded(mirrored, draw(identity(), true), false);
+        assertArrayEquals(new int[]{0,2,1,3,5,4}, mirrored.array());
+    }
+
+    @Test void expandedVertexStreamsReuseTheSameStableTriangleSort() {
+        var mesh = new TriangleMesh(new float[]{
+            0,0,-1, 1,0,-1, 0,1,-1,
+            0,0,-4, 1,0,-4, 0,1,-4},
+            new float[]{0,0,1,0,0,1, 0,0,1,0,0,1}, new int[]{0,1,2,3,4,5});
+        var writer = new MeshIndexWriter(mesh);
+        var output = IntBuffer.allocate(6);
+        writer.writeExpanded(output, draw(identity(), false), true);
+        assertArrayEquals(new int[]{3,4,5,0,1,2}, output.array());
+    }
+
     @Test void stableDepthSortMatchesFarToNearAndReusesWriter() {
         var mesh = new TriangleMesh(new float[]{
             0,0,-1, 1,0,-1, 0,1,-1,

@@ -70,6 +70,44 @@ class ObjMeshLoaderTest {
         assertEquals(0, mesh.u(0)); assertEquals(0, mesh.v(0));
     }
 
+    @Test void authoredAndGeneratedNormalsPreserveHardEdgesAndObjNegativeIndexSemantics() {
+        String geometry = """
+            v 0 0 0
+            v 1 0 0
+            v 0 1 0
+            vt 0 0
+            vt 1 0
+            vt 0 1
+            f 1/1 2/2 3/3
+            vn 0 2 0
+            f -3/-3/-1 -2/-2/-1 -1/-1/-1
+            """;
+        var mesh = ObjMeshLoader.parse(ID, geometry);
+        assertEquals(6, mesh.vertexCount(), "different normals must split otherwise-identical corners");
+        assertEquals(0, mesh.normalX(0), 1e-6); assertEquals(0, mesh.normalY(0), 1e-6);
+        assertEquals(1, mesh.normalZ(0), 1e-6);
+        assertEquals(0, mesh.normalX(3), 1e-6); assertEquals(1, mesh.normalY(3), 1e-6);
+        assertEquals(0, mesh.normalZ(3), 1e-6);
+    }
+
+    @Test void indexedZeroNormalsFallBackPerFaceWithoutRemovingTheirObjIndexSlot() {
+        var mesh = ObjMeshLoader.parse(ID, """
+            v 0 0 0
+            v 1 0 0
+            v 0 1 0
+            vt 0 0
+            vt 1 0
+            vt 0 1
+            vn 0 0 0
+            vn 0 -2 0
+            f 1/1/1 2/2/1 3/3/1
+            f 1/1/-1 2/2/-1 3/3/-1
+            """);
+        assertEquals(6, mesh.vertexCount());
+        assertEquals(1, mesh.normalZ(0), 1e-6);
+        assertEquals(-1, mesh.normalY(3), 1e-6);
+    }
+
     @Test void commentsNamesBomAndContinuationDoNotChangeGeometry() {
         String text = "\uFEFF# export\r\n" + QUAD + "o thing\ng left right\ns 1\nmtllib unused.mtl\nusemtl ignored\n"
             + "f 1/1 2/2 \\\n 3/3 # done\n";
@@ -105,6 +143,7 @@ class ObjMeshLoaderTest {
         var mesh = new TriangleMesh(p, uv, indices);
         p[0] = 99; uv[0] = 99; indices[0] = 2;
         assertEquals(0, mesh.x(0)); assertEquals(0, mesh.u(0)); assertEquals(0, mesh.index(0));
+        assertEquals(1, mesh.normalZ(0), 1e-6, "compatibility constructor generates normals");
         assertThrows(IllegalArgumentException.class, () -> new TriangleMesh(new float[]{Float.NaN,0,0}, new float[2], new int[]{0,0,0}));
         assertThrows(IllegalArgumentException.class, () -> mesh.scaleTo(new Vec3d(-1,1,0)));
         assertThrows(IllegalArgumentException.class, () -> mesh.scaleTo(new Vec3d(Double.NaN,1,0)));

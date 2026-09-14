@@ -7,7 +7,8 @@ import network.azusake.halo.core.Identifier;
 public record MeshDraw(Identifier model, Identifier texture, float[] localToView,
                        boolean cull, boolean blend, boolean depthTest, boolean depthWrite,
                        float red, float green, float blue, float alpha,
-                       boolean mirrored, MaterialState.Mesh material, LightSample light) {
+                       boolean mirrored, MaterialState.Mesh material, LightSample light,
+                       boolean directionalLighting) {
     public MeshDraw {
         Objects.requireNonNull(model);
         Objects.requireNonNull(texture);
@@ -23,13 +24,22 @@ public record MeshDraw(Identifier model, Identifier texture, float[] localToView
         }
     }
 
+    /** Compatibility constructor for adapters predating normal-based directional lighting. */
+    public MeshDraw(Identifier model, Identifier texture, float[] localToView,
+                    boolean cull, boolean blend, boolean depthTest, boolean depthWrite,
+                    float red, float green, float blue, float alpha,
+                    boolean mirrored, MaterialState.Mesh material, LightSample light) {
+        this(model, texture, localToView, cull, blend, depthTest, depthWrite,
+            red, green, blue, alpha, mirrored, material, light, false);
+    }
+
     /** Compatibility constructor for adapters predating native block/sky light samples. */
     public MeshDraw(Identifier model, Identifier texture, float[] localToView,
                     boolean cull, boolean blend, boolean depthTest, boolean depthWrite,
                     float red, float green, float blue, float alpha,
                     boolean mirrored, MaterialState.Mesh material) {
         this(model, texture, localToView, cull, blend, depthTest, depthWrite,
-            red, green, blue, alpha, mirrored, material, LightSample.UNAVAILABLE);
+            red, green, blue, alpha, mirrored, material, LightSample.UNAVAILABLE, false);
     }
 
     @Override public float[] localToView() { return localToView.clone(); }

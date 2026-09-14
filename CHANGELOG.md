@@ -7,6 +7,11 @@
   host's native lightmap; glowing primitives request full-bright while retaining animated glow tint.
 - Retain the original scalar light callback and `FrameScene` / `DrawBatch` / `MeshDraw` constructors as a fallback
   for adapters that have not adopted native lightmaps.
+- Preserve normalized OBJ `vn` data and generate per-face normals when it is missing or zero. Extend mesh and legacy
+  draw commands with normals plus an explicit directional-lighting request for non-glowing groups; compatibility
+  constructors retain their prior flat-lighting behavior.
+- Let hosts write source-order or stably depth-sorted indices for triangle-corner-expanded vertex streams, while
+  retaining the existing unique-vertex index contract for adapters that do not need derived per-triangle attributes.
 - Keep definition formats, storage, protocol, schema 1.1.0 and anchor API v2 unchanged.
 
 ## 2.1.0 — 2026-09-13

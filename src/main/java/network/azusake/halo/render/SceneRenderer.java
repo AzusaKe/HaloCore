@@ -15,6 +15,7 @@ import network.azusake.halo.shape.RingPrimitive;
 import network.azusake.halo.shape.BillboardPrimitive;
 import network.azusake.halo.shape.HaloGroup;
 import network.azusake.halo.shape.MeshPrimitive;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -570,6 +571,7 @@ public final class SceneRenderer {
             float effectiveGlow = inheritedGlow * animatedGlow;
             LightSample groupLight = group.glowing() ? LightSample.FULL_BRIGHT : ambientLight;
             draw.setLight(groupLight);
+            draw.setDirectionalLighting(!group.glowing());
 
             // Ensure the GL shader tint matches this group's effective alpha.
             // Always set it (even to 1.0) so a translucent sibling subtree or a
@@ -590,7 +592,8 @@ public final class SceneRenderer {
                     renderRing(rp, matrices, group.glowing(), brightness, effectiveGlow);
                 } else if (primitive instanceof MeshPrimitive mesh) {
                     meshDraw.add(mesh, matrices.peek().getPositionMatrix(), finalAlpha,
-                        group.glowing() ? effectiveGlow : brightness, animTime, groupLight);
+                        group.glowing() ? effectiveGlow : brightness, animTime, groupLight,
+                        !group.glowing());
                 }
             }
 
@@ -728,6 +731,7 @@ public final class SceneRenderer {
         // rotation can override the facing.  Other quads keep using the
         // accumulated matrix-stack transform.
         Matrix4f positionMatrix;
+        Vector3f surfaceNormal;
         Vector3f c0, c1, c2, c3; // quad corners in the position-matrix space
         if (billboard.faceCamera()) {
             CameraFacing facing = computeCameraFacing(
@@ -742,16 +746,19 @@ public final class SceneRenderer {
             c1 = new Vector3f(facing.center()).add(rightHalf).sub(upHalf);
             c2 = new Vector3f(facing.center()).add(rightHalf).add(upHalf);
             c3 = new Vector3f(facing.center()).sub(rightHalf).add(upHalf);
+            surfaceNormal = new Vector3f(facing.right()).cross(facing.up()).normalize();
         } else {
             positionMatrix = matrices.peek().getPositionMatrix();
             c0 = new Vector3f(-hw, 0.0f, -hd);
             c1 = new Vector3f( hw, 0.0f, -hd);
             c2 = new Vector3f( hw, 0.0f,  hd);
             c3 = new Vector3f(-hw, 0.0f,  hd);
+            surfaceNormal = transformNormal(normalMatrix(positionMatrix), 0, -1, 0);
         }
 
         GeometryCollector tessellator = draw;
         GeometryCollector.Builder builder = tessellator.getBuffer();
+        builder.normal(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z);
 
         boolean hasTexture = bindTextureSafe(billboard.texture());
 
@@ -910,6 +917,7 @@ public final class SceneRenderer {
         float brightnessFactor = glowing ? animatedGlow : brightness;
 
         Matrix4f positionMatrix = matrices.peek().getPositionMatrix();
+        Matrix3f normalMatrix = normalMatrix(positionMatrix);
 
         GeometryCollector tessellator = draw;
         GeometryCollector.Builder builder = tessellator.getBuffer();
@@ -992,13 +1000,13 @@ public final class SceneRenderer {
                         cr = cg = cb = brightness;
                     }
                     // Triangle A
-                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
                     // Triangle B
-                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
                 }
                 tessellator.draw();
             }
@@ -1066,13 +1074,13 @@ public final class SceneRenderer {
                         cr = cg = cb = brightness;
                     }
                     // Triangle A
-                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
                     // Triangle B
-                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
-                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
                 }
                 tessellator.draw();
             }
@@ -1098,12 +1106,12 @@ public final class SceneRenderer {
                 float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
                 float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
                 float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
-                builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
             }
             tessellator.draw();
 
@@ -1115,12 +1123,12 @@ public final class SceneRenderer {
                 float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
                 float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
                 float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
-                builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
-                builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
             }
             tessellator.draw();
         }
@@ -1132,6 +1140,25 @@ public final class SceneRenderer {
             draw.enableDepthTest();
         }
         draw.disableBlend();
+    }
+
+    private static GeometryCollector.Builder ringNormal(GeometryCollector.Builder builder,
+                                                         Matrix3f matrix, float x, float z) {
+        Vector3f normal = transformNormal(matrix, x, 0, z);
+        return builder.normal(normal.x, normal.y, normal.z);
+    }
+
+    private static Matrix3f normalMatrix(Matrix4f transform) {
+        Matrix3f matrix = new Matrix3f(transform);
+        float determinant = matrix.determinant();
+        return Float.isFinite(determinant) && Math.abs(determinant) > 1.0e-8f
+            ? matrix.invert().transpose() : new Matrix3f();
+    }
+
+    private static Vector3f transformNormal(Matrix3f matrix, float x, float y, float z) {
+        Vector3f normal = matrix.transform(new Vector3f(x, y, z));
+        return normal.lengthSquared() > 1.0e-12f && Float.isFinite(normal.lengthSquared())
+            ? normal.normalize() : new Vector3f(0, -1, 0);
     }
 
     // ------------------------------------------------------------------

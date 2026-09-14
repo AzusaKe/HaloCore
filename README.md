@@ -70,7 +70,10 @@ for hosts that only need diagnostic logging. Callbacks must not mutate the runti
 - Light/texture callbacks are read-only facts for the frame. New adapters provide a `LightSample` with separate
   block/sky levels at the halo root; non-glowing commands retain that sample for the host lightmap, while glowing
   commands request full-bright and keep `animation.glow` as their color multiplier. The original scalar callback
-  and constructors remain a compatibility fallback for adapters that predate native lightmaps. Millisecond time is shared across animation
+  and constructors remain a compatibility fallback for adapters that predate native lightmaps. Non-glowing commands
+  also request directional lighting and carry normalized surface normals; glowing commands explicitly retain flat
+  lighting. Older `DrawBatch`, `DrawBatch.Vertex`, `MeshDraw`, and `TriangleMesh` constructors remain source-compatible
+  and default to the earlier flat contract. Millisecond time is shared across animation
   stages; nanosecond deltas drive the retained EMA and damping clamp. Fake clocks enable replay tests.
 
 ## Mesh adapter contract (2.1.0)
@@ -79,7 +82,7 @@ for hosts that only need diagnostic logging. Callbacks must not mutate the runti
 `VisualAssetLoader` accepts a host `Source` for OBJ text and decoded texture metadata; create a new loader
 for each resource reload. It caches successes and failures by resource ID, reports each failed read once,
 and produces immutable `VisualResources` snapshots. Definitions may change within a generation without
-reparsing shared assets. `TriangleMesh` owns indexed positions and UVs; its bounds use referenced vertices.
+reparsing shared assets. `TriangleMesh` owns indexed positions, UVs and normals; its bounds use referenced vertices.
 
 Supply one `VisualResources` snapshot in `FrameScene.visuals()`. The old constructor supplies an empty
 snapshot, retaining old primitive behavior. Missing mesh assets skip that primitive without revoking
@@ -98,7 +101,9 @@ same normalized UV domain; do not downsample or create enlarged texture copies. 
 
 Core submits old primitives in their original order, then depth-writing meshes, then transparent meshes
 sorted by instance center. Hosts use one reusable `MeshIndexWriter` per cached mesh to preserve stable
-back-to-front triangle-center ordering and mirrored winding. Honor each command's depth/blend/cull flags.
+back-to-front triangle-center ordering and mirrored winding. The regular writer methods target the mesh's
+unique-vertex stream; `writeExpandedSourceOrder` and `writeExpanded` target a triangle-corner-expanded stream for
+host formats that derive tangents or other attributes from consecutive triangle submissions. Honor each command's depth/blend/cull flags.
 `ClientPort.renderFrame` exposes this path; the original `render` expands meshes for compatibility.
 Transparency sorting is not global with the host world's translucent surfaces. Geometry, emission selection,
 light samples, animation and index ordering are platform independent; interpreting block/sky samples through a
@@ -112,7 +117,9 @@ authored coordinates about their origin before group transforms, with no bounds 
 restriction. When false, primitive `scale` has no effect. Supplied size/scale fields are still validated.
 The old four-argument `MeshPrimitive` constructor retains the size-fitting behavior.
 UV V is flipped only by OBJ import. The parser supports textured triangles and
-planar convex quads, positive/negative independent indices and optional normals. MTL and names are
+planar convex quads, positive/negative independent indices and optional normals. Authored `vn` values are normalized
+and remain part of the corner-deduplication key so hard edges survive. Missing normals are generated per face; indexed
+zero normals from older exporters retain their OBJ index slot but use the same fallback. MTL and names are
 ignored; unsupported polygons require export-time triangulation. Limits are 16 MiB text, 1,000,000
 declared position/UV/normal elements combined, and 250,000 triangles; these are load guards, not frame
 rate promises. Adapters should cache indexed vertex geometry by visual-resource generation; a host that

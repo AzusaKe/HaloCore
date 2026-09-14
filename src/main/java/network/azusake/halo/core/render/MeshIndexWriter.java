@@ -39,7 +39,19 @@ public final class MeshIndexWriter {
     public void writeSourceOrder(IntBuffer destination, boolean mirrored) {
         requireCapacity(destination);
         for (int triangle = 0; triangle < mesh.triangleCount(); triangle++) {
-            writeTriangle(destination, triangle, mirrored);
+            writeTriangle(destination, triangle, mirrored, false);
+        }
+    }
+
+    /**
+     * Write indices for a vertex stream expanded in authored triangle-corner order.
+     * Hosts need this when their vertex-format adapter derives per-triangle attributes
+     * while vertices are submitted (for example Iris entity tangents).
+     */
+    public void writeExpandedSourceOrder(IntBuffer destination, boolean mirrored) {
+        requireCapacity(destination);
+        for (int triangle = 0; triangle < mesh.triangleCount(); triangle++) {
+            writeTriangle(destination, triangle, mirrored, true);
         }
     }
 
@@ -54,7 +66,21 @@ public final class MeshIndexWriter {
         int triangles = mesh.triangleCount();
         for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
         if (triangles > 1) sort(draw);
-        for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored());
+        for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored(), false);
+    }
+
+    /** Write stable back-to-front indices for an expanded triangle-corner vertex stream. */
+    public void writeExpanded(IntBuffer destination, MeshDraw draw, boolean backToFront) {
+        requireCapacity(destination);
+        Objects.requireNonNull(draw);
+        if (!backToFront) {
+            writeExpandedSourceOrder(destination, draw.mirrored());
+            return;
+        }
+        int triangles = mesh.triangleCount();
+        for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
+        if (triangles > 1) sort(draw);
+        for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored(), true);
     }
 
     private void requireCapacity(IntBuffer destination) {
@@ -62,11 +88,11 @@ public final class MeshIndexWriter {
         if (destination.remaining() < indexCount()) throw new IllegalArgumentException("Insufficient index buffer capacity");
     }
 
-    private void writeTriangle(IntBuffer destination, int triangle, boolean mirrored) {
+    private void writeTriangle(IntBuffer destination, int triangle, boolean mirrored, boolean expanded) {
         int base = triangle * 3;
-        destination.put(mesh.index(base));
-        destination.put(mesh.index(base + (mirrored ? 2 : 1)));
-        destination.put(mesh.index(base + (mirrored ? 1 : 2)));
+        destination.put(expanded ? base : mesh.index(base));
+        destination.put(expanded ? base + (mirrored ? 2 : 1) : mesh.index(base + (mirrored ? 2 : 1)));
+        destination.put(expanded ? base + (mirrored ? 1 : 2) : mesh.index(base + (mirrored ? 1 : 2)));
     }
 
     private void sort(MeshDraw draw) {
