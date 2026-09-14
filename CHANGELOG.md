@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.2 — Unreleased
+## 2.1.2 — 2026-09-14
 
 - Restore case-insensitive namespace-prefix matching for halo identifiers while retaining path-prefix matching.
 - Add optional block/sky `LightSample` frame input and draw-command output so non-glowing primitives can use a

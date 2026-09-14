@@ -127,8 +127,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current source version is **2.1.2** and the latest tagged
-release is **2.1.0**, schema **1.1.0**.
+Feature version is in `gradle.properties`; the current source version and latest tagged release are **2.1.2**,
+schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.
