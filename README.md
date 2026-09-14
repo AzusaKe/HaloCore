@@ -19,7 +19,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Server ownership | `ServerRuntime`, `OwnershipStore`, `Updates` |
 | Client | `ClientPort` implemented by one `ClientRuntime` per logical client |
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
-| Frame input | `FrameScene`, entity/camera samples, light and texture lookup callbacks |
+| Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
 | Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
 | External anchors | unchanged `network.azusake.halo.api.v2` |
 | Config/diagnostics | `RuntimeConfigSnapshot`, `ClientStatus`, `Diagnostics.Sink` |
@@ -67,7 +67,10 @@ for hosts that only need diagnostic logging. Callbacks must not mutate the runti
   indexed geometry and supplies a column-major local-to-view transform. Consume both lists in order. Bind the given texture, tint, blend, culling, depth-test
   and depth-write state; `blend=true` uses the existing standard alpha blend. Light is sampled in world
   space and emission is already included in the output color. Billboard/ring UV conventions are unchanged.
-- Light/texture callbacks are read-only facts for the frame. Millisecond time is shared across animation
+- Light/texture callbacks are read-only facts for the frame. New adapters provide a `LightSample` with separate
+  block/sky levels at the halo root; non-glowing commands retain that sample for the host lightmap, while glowing
+  commands request full-bright and keep `animation.glow` as their color multiplier. The original scalar callback
+  and constructors remain a compatibility fallback for adapters that predate native lightmaps. Millisecond time is shared across animation
   stages; nanosecond deltas drive the retained EMA and damping clamp. Fake clocks enable replay tests.
 
 ## Mesh adapter contract (2.1.0)
@@ -97,9 +100,9 @@ Core submits old primitives in their original order, then depth-writing meshes, 
 sorted by instance center. Hosts use one reusable `MeshIndexWriter` per cached mesh to preserve stable
 back-to-front triangle-center ordering and mirrored winding. Honor each command's depth/blend/cull flags.
 `ClientPort.renderFrame` exposes this path; the original `render` expands meshes for compatibility.
-Transparency sorting is not global with the host world's translucent surfaces. Geometry, brightness,
-animation and index ordering are platform independent; shader programs and GPU resource lifetimes belong
-exclusively to the host.
+Transparency sorting is not global with the host world's translucent surfaces. Geometry, emission selection,
+light samples, animation and index ordering are platform independent; interpreting block/sky samples through a
+version's lightmap, shader programs and GPU resource lifetimes belong exclusively to the host.
 
 Mesh `size:[x,y,z]` fits the authored bounds in blocks by axis, without moving the exported origin or
 changing axes. Group transforms apply afterwards. Zero source extent requires target size=0 and uses

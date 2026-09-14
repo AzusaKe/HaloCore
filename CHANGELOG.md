@@ -3,6 +3,10 @@
 ## 2.1.1 — Unreleased
 
 - Restore case-insensitive namespace-prefix matching for halo identifiers while retaining path-prefix matching.
+- Add optional block/sky `LightSample` frame input and draw-command output so non-glowing primitives can use a
+  host's native lightmap; glowing primitives request full-bright while retaining animated glow tint.
+- Retain the original scalar light callback and `FrameScene` / `DrawBatch` / `MeshDraw` constructors as a fallback
+  for adapters that have not adopted native lightmaps.
 - Keep definition formats, storage, protocol, schema 1.1.0 and anchor API v2 unchanged.
 
 ## 2.1.0 — 2026-09-13

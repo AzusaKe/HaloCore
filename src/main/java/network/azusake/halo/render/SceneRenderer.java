@@ -391,7 +391,12 @@ public final class SceneRenderer {
         idlePhaseTracker.record(instance.getEntityUuid(), animTime, transitionActive, runtime.nowMillis());
 
         // ---- compute light at halo position for non-glowing layers ----
-        float brightness = Math.max(scene.lights().brightness(frame.worldPosition()), 0.04f);
+        // New adapters preserve block and sky as separate lightmap inputs. Older
+        // adapters keep the original pre-multiplied scalar brightness fallback.
+        LightSample ambientLight = Objects.requireNonNull(scene.lightmaps().sample(frame.worldPosition()));
+        float brightness = ambientLight.available()
+            ? 1.0f
+            : Math.max(scene.lights().brightness(frame.worldPosition()), 0.04f);
 
         // ---- render model groups ----
         var model = def.model();
@@ -431,7 +436,7 @@ public final class SceneRenderer {
             // Step 3: Recursive group rendering
             for (HaloGroup group : model.groups()) {
                 // Root groups inherit the definition root's alpha/glow
-                renderGroup(group, matrices, camera, animTime, brightness, defAlpha, defGlow,
+                renderGroup(group, matrices, camera, animTime, brightness, ambientLight, defAlpha, defGlow,
                     transitionActive, transitionElapsed, isStartup, instance,
                     startupConfig, shutdownConfig);
             }
@@ -458,6 +463,7 @@ public final class SceneRenderer {
      * alpha (rotation in YXZ order, matching the idle animation).</p>
      */
     private void renderGroup(HaloGroup group, MatrixStack matrices, CameraSample camera, double animTime, float brightness,
+                              LightSample ambientLight,
                               float inheritedAlpha, float inheritedGlow,
                               boolean transitionActive, double transitionElapsed, boolean isStartup,
                               HaloInstance instance,
@@ -562,6 +568,8 @@ public final class SceneRenderer {
                 ? inheritedAlpha * (transitionDrivesAlpha ? transitionAlpha : layerAlpha)
                 : inheritedAlpha * layerAlpha;
             float effectiveGlow = inheritedGlow * animatedGlow;
+            LightSample groupLight = group.glowing() ? LightSample.FULL_BRIGHT : ambientLight;
+            draw.setLight(groupLight);
 
             // Ensure the GL shader tint matches this group's effective alpha.
             // Always set it (even to 1.0) so a translucent sibling subtree or a
@@ -582,7 +590,7 @@ public final class SceneRenderer {
                     renderRing(rp, matrices, group.glowing(), brightness, effectiveGlow);
                 } else if (primitive instanceof MeshPrimitive mesh) {
                     meshDraw.add(mesh, matrices.peek().getPositionMatrix(), finalAlpha,
-                        group.glowing() ? effectiveGlow : brightness, animTime);
+                        group.glowing() ? effectiveGlow : brightness, animTime, groupLight);
                 }
             }
 
@@ -593,7 +601,7 @@ public final class SceneRenderer {
             float childAlpha = group.inheritAlpha() ? finalAlpha : 1.0f;
             float childGlow = group.inheritGlow() ? effectiveGlow : 1.0f;
             for (HaloGroup child : group.children()) {
-                renderGroup(child, matrices, camera, animTime, brightness, childAlpha, childGlow,
+                renderGroup(child, matrices, camera, animTime, brightness, ambientLight, childAlpha, childGlow,
                     transitionActive, transitionElapsed, isStartup, instance,
                     startupConfig, shutdownConfig);
             }

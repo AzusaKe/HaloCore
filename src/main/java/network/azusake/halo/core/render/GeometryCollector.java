@@ -14,6 +14,7 @@ public final class GeometryCollector {
     private Identifier texture;
     private boolean textured, cull=true, blend, depthTest=true, depthWrite=true;
     private float red=1,green=1,blue=1,alpha=1;
+    private LightSample light = LightSample.UNAVAILABLE;
     public GeometryCollector(FrameScene.TextureLookup textures) { this.textures=textures; }
     public List<DrawBatch> batches() { return List.copyOf(batches); }
     public Builder getBuffer() { return builder; }
@@ -28,9 +29,10 @@ public final class GeometryCollector {
     public void disableDepthTest() { depthTest=false; }
     public void depthMask(boolean value) { depthWrite=value; }
     public void setShaderColor(float r,float g,float b,float a) { red=r;green=g;blue=b;alpha=a; }
+    public void setLight(LightSample value) { light=java.util.Objects.requireNonNull(value); }
     public void draw() {
         batches.add(new DrawBatch(builder.topology,builder.vertices,texture,textured,cull,blend,
-            depthTest,depthWrite,red,green,blue,alpha));
+            depthTest,depthWrite,red,green,blue,alpha,MaterialState.LEGACY,light));
         builder.vertices.clear();
     }
     public final class Builder {

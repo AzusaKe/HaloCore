@@ -46,6 +46,7 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
         var vertices = new ArrayList<DrawBatch.Vertex>(indices.remaining());
         while (indices.hasRemaining()) vertices.add(transformed[indices.get()]);
         return new DrawBatch(DrawBatch.Topology.TRIANGLES, vertices, draw.texture(), true,
-            draw.cull(), draw.blend(), draw.depthTest(), draw.depthWrite(), 1, 1, 1, draw.alpha(), draw.material());
+            draw.cull(), draw.blend(), draw.depthTest(), draw.depthWrite(), 1, 1, 1, draw.alpha(),
+            draw.material(), draw.light());
     }
 }

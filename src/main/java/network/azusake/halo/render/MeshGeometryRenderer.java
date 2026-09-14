@@ -12,6 +12,7 @@ import network.azusake.halo.core.render.DrawBatch;
 import network.azusake.halo.core.render.FrameOutput;
 import network.azusake.halo.core.render.MaterialState;
 import network.azusake.halo.core.render.MeshDraw;
+import network.azusake.halo.core.render.LightSample;
 import network.azusake.halo.core.render.TriangleMesh;
 import network.azusake.halo.core.render.VisualResources;
 import network.azusake.halo.shape.MeshPrimitive;
@@ -37,6 +38,11 @@ public final class MeshGeometryRenderer {
     }
 
     public void add(MeshPrimitive primitive, Matrix4f parent, float alpha, float brightness, double time) {
+        add(primitive, parent, alpha, brightness, time, LightSample.UNAVAILABLE);
+    }
+
+    public void add(MeshPrimitive primitive, Matrix4f parent, float alpha, float brightness, double time,
+                    LightSample light) {
         if (alpha <= 0) return;
         TriangleMesh mesh = resources.meshes().get(primitive.model());
         var texture = resources.textures().get(primitive.texture());
@@ -61,7 +67,7 @@ public final class MeshGeometryRenderer {
             validateBounds(mesh, matrix);
             MeshDraw draw = new MeshDraw(primitive.model(), primitive.texture(), matrix,
                 !primitive.material().doubleSided(), blend, true, !blend,
-                brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask));
+                brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask), light);
             if (blend) {
                 Vec3d center = mesh.center();
                 float depth = matrix[2] * (float) center.x + matrix[6] * (float) center.y

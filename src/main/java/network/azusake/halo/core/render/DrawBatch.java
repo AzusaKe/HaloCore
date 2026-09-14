@@ -7,14 +7,26 @@ import network.azusake.halo.core.Identifier;
 public record DrawBatch(Topology topology, List<Vertex> vertices, Identifier texture,
                         boolean textured, boolean cull, boolean blend, boolean depthTest,
                         boolean depthWrite, float red, float green, float blue, float alpha,
-                        MaterialState material) {
-    public DrawBatch { vertices = List.copyOf(vertices); java.util.Objects.requireNonNull(material); }
+                        MaterialState material, LightSample light) {
+    public DrawBatch {
+        vertices = List.copyOf(vertices);
+        java.util.Objects.requireNonNull(material);
+        java.util.Objects.requireNonNull(light);
+    }
+    /** Compatibility constructor for adapters predating native block/sky light samples. */
+    public DrawBatch(Topology topology, List<Vertex> vertices, Identifier texture,
+                     boolean textured, boolean cull, boolean blend, boolean depthTest,
+                     boolean depthWrite, float red, float green, float blue, float alpha,
+                     MaterialState material) {
+        this(topology, vertices, texture, textured, cull, blend, depthTest, depthWrite,
+            red, green, blue, alpha, material, LightSample.UNAVAILABLE);
+    }
     /** Compatibility constructor for the original billboard/ring adapters. */
     public DrawBatch(Topology topology, List<Vertex> vertices, Identifier texture,
                      boolean textured, boolean cull, boolean blend, boolean depthTest,
                      boolean depthWrite, float red, float green, float blue, float alpha) {
         this(topology, vertices, texture, textured, cull, blend, depthTest, depthWrite,
-            red, green, blue, alpha, MaterialState.LEGACY);
+            red, green, blue, alpha, MaterialState.LEGACY, LightSample.UNAVAILABLE);
     }
     public enum Topology { QUADS, TRIANGLES }
     public record Vertex(float x, float y, float z, float u, float v,

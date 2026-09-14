@@ -7,11 +7,12 @@ import network.azusake.halo.core.Identifier;
 public record MeshDraw(Identifier model, Identifier texture, float[] localToView,
                        boolean cull, boolean blend, boolean depthTest, boolean depthWrite,
                        float red, float green, float blue, float alpha,
-                       boolean mirrored, MaterialState.Mesh material) {
+                       boolean mirrored, MaterialState.Mesh material, LightSample light) {
     public MeshDraw {
         Objects.requireNonNull(model);
         Objects.requireNonNull(texture);
         Objects.requireNonNull(material);
+        Objects.requireNonNull(light);
         localToView = Objects.requireNonNull(localToView).clone();
         if (localToView.length != 16) throw new IllegalArgumentException("localToView must be a 4x4 matrix");
         for (float value : localToView) if (!Float.isFinite(value)) {
@@ -20,6 +21,15 @@ public record MeshDraw(Identifier model, Identifier texture, float[] localToView
         for (float value : new float[]{red, green, blue, alpha}) if (!Float.isFinite(value)) {
             throw new IllegalArgumentException("Mesh color contains a non-finite value");
         }
+    }
+
+    /** Compatibility constructor for adapters predating native block/sky light samples. */
+    public MeshDraw(Identifier model, Identifier texture, float[] localToView,
+                    boolean cull, boolean blend, boolean depthTest, boolean depthWrite,
+                    float red, float green, float blue, float alpha,
+                    boolean mirrored, MaterialState.Mesh material) {
+        this(model, texture, localToView, cull, blend, depthTest, depthWrite,
+            red, green, blue, alpha, mirrored, material, LightSample.UNAVAILABLE);
     }
 
     @Override public float[] localToView() { return localToView.clone(); }

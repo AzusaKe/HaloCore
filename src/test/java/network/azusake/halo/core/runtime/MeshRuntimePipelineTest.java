@@ -42,6 +42,12 @@ class MeshRuntimePipelineTest {
             pos -> .4f, id -> true, assets);
     }
     private FrameScene frame(VisualResources assets) { return frame(0,assets,true,false,false,1); }
+    private FrameScene frame(VisualResources assets, LightSample light) {
+        FrameScene legacy = frame(assets);
+        return new FrameScene(legacy.worldToken(), legacy.timeMillis(), legacy.frameNanos(), legacy.camera(),
+            legacy.entities(), legacy.rootTransform(), legacy.lights(), legacy.textures(), legacy.visuals(),
+            position -> light);
+    }
     private static String group(String mesh) { return "{\"primitive\":" + mesh + "}"; }
     private static MaterialState.AlphaMask mask(DrawBatch batch) { return ((MaterialState.Mesh)batch.material()).mask(); }
 
@@ -81,6 +87,23 @@ class MeshRuntimePipelineTest {
         assertEquals(List.of(a),near.render(frame(ASSETS)));
         var ambient = client("", "{\"glowing\":false,\"primitive\":"+ MESH +"}");
         assertEquals(.4f,ambient.render(frame(ASSETS)).get(0).vertices().get(0).red());
+    }
+
+    @Test void nativeLightmapSamplesStaySeparateAndGlowingUsesFullBright() {
+        String billboard = "{\"type\":\"billboard\",\"texture\":\"halo:old.png\",\"size\":[1,1]}";
+        String groups = "{\"glowing\":false,\"primitive\":" + MESH + "},"
+            + "{\"glowing\":false,\"primitive\":" + billboard + "}";
+        FrameOutput ambient = client("", groups).renderFrame(frame(ASSETS, new LightSample(3, 12)));
+        assertEquals(new LightSample(3, 12), ambient.meshes().get(0).light());
+        assertEquals(new LightSample(3, 12), ambient.legacyBatches().get(0).light());
+        assertEquals(1, ambient.meshes().get(0).red());
+        assertEquals(1, ambient.legacyBatches().get(0).vertices().get(0).red());
+        assertEquals(new LightSample(3, 12), ambient.expandedBatches(ASSETS).get(1).light());
+
+        String glow = "\"animation\":{\"glow\":[{\"function\":\"linear\",\"start\":0.5,\"speed\":0}]},";
+        FrameOutput emissive = client(glow, group(MESH)).renderFrame(frame(ASSETS, new LightSample(0, 0)));
+        assertEquals(LightSample.FULL_BRIGHT, emissive.meshes().get(0).light());
+        assertEquals(.5f, emissive.meshes().get(0).red(), 1e-6);
     }
 
     @Test void startupAndShutdownFreezeMaskAtExistingIdlePhase() {

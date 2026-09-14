@@ -54,6 +54,7 @@ class AdapterContractTest {
                 MeshIndexWriter.class, RuntimeConfigSnapshot.class,
                 TriangleMesh.class, VisualResources.class, VisualResources.TextureInfo.class,
                 MaterialState.class, MaterialState.Mesh.class, MaterialState.AlphaMask.class,
+                LightSample.class, FrameScene.LightmapSampler.class,
                 DefinitionSnapshot.AssetDependencies.class, VisualAssetLoader.class, VisualAssetLoader.Source.class,
                 ServerRuntime.OwnershipStore.class, ServerRuntime.Updates.class)) {
             for (var method : type.getDeclaredMethods()) {
