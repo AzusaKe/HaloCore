@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.2.0 — unreleased
+## 2.2.0 — 2026-09-15
 
 - Add optional `PreviewPort`, closeable `PreviewSession` and platform-neutral `PreviewFrame` inputs;
   retain `ClientPort`, world frame/output constructors and anchor API v2 compatibility.
@@ -9,6 +9,12 @@
 - Add stateless head-relative preview bases and orthographic `face_camera`; isolate view geometry
   from world physics, teleport flags and body-pose observations.
 - Backfill `playerPreviewHaloEnabled=true` in existing client configuration.
+- Add opt-in `PreviewOptions.PHYSICS`, with independent per-session motion using the world's
+  calculator, parameters and frame-time smoothing. Keep the no-argument preview entry rigid.
+- Add defaulted session validity/reset methods and `playerPreviewHaloPhysicsEnabled=true`;
+  repeated view samples do not advance motion twice, and lifecycle/definition changes reset it.
+- Enable automatic preview physics by default, backfill old configurations, and preserve explicit
+  `false` for rigid head following. Explicit no-argument API sessions remain rigid for compatibility.
 - Verify frozen 2.1.2 client-port consumers against the built jar, alongside preview isolation,
   coordinate, lifecycle, resource recovery and platform-boundary tests.
 - Keep definition schema 1.1.0, persistence, network protocols and world anchor semantics unchanged.

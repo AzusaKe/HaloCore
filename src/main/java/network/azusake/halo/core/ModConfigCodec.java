@@ -18,6 +18,9 @@ public final class ModConfigCodec {
             HaloModConfig parsed=JSON.fromJson(document,HaloModConfig.class);
             if(parsed==null)return invalid();
             boolean changed=false;
+            if(missing(document,"playerPreviewHaloPhysicsEnabled")) {
+                document.addProperty("playerPreviewHaloPhysicsEnabled",parsed.isPlayerPreviewHaloPhysicsEnabled());changed=true;
+            }
             if(missing(document,"playerPreviewHaloEnabled")) {
                 document.addProperty("playerPreviewHaloEnabled",parsed.isPlayerPreviewHaloEnabled());changed=true;
             }

@@ -26,20 +26,37 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
     private long visualGeneration = Long.MIN_VALUE;
 
     @Override public PreviewSession openPreview() {
+        return openPreview(PreviewOptions.RIGID);
+    }
+    @Override public PreviewSession openPreview(PreviewOptions options) {
+        Objects.requireNonNull(options);
         final long epoch = previewEpoch;
         return new PreviewSession() {
             private SceneRenderer viewRenderer = new SceneRenderer(ClientRuntime.this);
+            private final network.azusake.halo.physics.PreviewMotion motion = new network.azusake.halo.physics.PreviewMotion();
+            private HaloInstance owner;
+            private int runtimeId;
+            @Override public boolean isValid() { return viewRenderer != null && epoch == previewEpoch; }
+            @Override public void resetMotion() { motion.reset(); owner = null; }
             @Override public FrameOutput render(PreviewFrame frame) {
                 Objects.requireNonNull(frame);
                 var appearance = renderer.appearance(frame.wearer());
-                if (viewRenderer == null || epoch != previewEpoch || appearance == null
+                if (!isValid() || appearance == null
                         || !Objects.equals(entityIds.get(frame.wearer()), frame.runtimeId())
                         || visualGeneration != frame.visuals().generation()) {
+                    resetMotion();
                     return new FrameOutput(frame.visuals().generation(), List.of(), List.of());
                 }
+                HaloInstance current = visuals.get(frame.wearer());
+                if (owner != current || runtimeId != frame.runtimeId()) resetMotion();
+                owner = current;
+                runtimeId = frame.runtimeId();
+                if (options.physicsEnabled())
+                    return viewRenderer.renderPreview(frame, appearance,
+                        motion.calculate(frame, appearance.definition(), config));
                 return viewRenderer.renderPreview(frame, appearance);
             }
-            @Override public void close() { viewRenderer = null; }
+            @Override public void close() { resetMotion(); viewRenderer = null; }
         };
     }
     public ClientRuntime() { this(System::currentTimeMillis); }

@@ -25,6 +25,11 @@ public class HaloModConfig {
     public boolean isPlayerPreviewHaloEnabled() { return playerPreviewHaloEnabled; }
     public void setPlayerPreviewHaloEnabled(boolean value) { playerPreviewHaloEnabled = value; }
 
+    /** Client-only preview physics, enabled by default; false selects rigid head following. */
+    private boolean playerPreviewHaloPhysicsEnabled = true;
+    public boolean isPlayerPreviewHaloPhysicsEnabled() { return playerPreviewHaloPhysicsEnabled; }
+    public void setPlayerPreviewHaloPhysicsEnabled(boolean value) { playerPreviewHaloPhysicsEnabled = value; }
+
     /**
      * Experimental YSM 2.6.5 render-anchor capture. Enabled by default after
      * compatibility validation; users may opt out in halo_mod_config.json.

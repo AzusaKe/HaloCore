@@ -7,6 +7,10 @@ import network.azusake.halo.core.render.PreviewFrame;
 public interface PreviewSession extends AutoCloseable {
     /** Consumes the latest owning-client appearance frame. An unavailable wearer produces no draws. */
     FrameOutput render(PreviewFrame frame);
+    /** Lifecycle query for hosts retaining sessions across frames; legacy providers default to usable. */
+    default boolean isValid() { return true; }
+    /** Reset only this view's motion (for a changed model or discontinuous host scene). */
+    default void resetMotion() {}
     /** Idempotent. Rendering a closed or world-invalidated session produces no draws. */
     @Override void close();
 }

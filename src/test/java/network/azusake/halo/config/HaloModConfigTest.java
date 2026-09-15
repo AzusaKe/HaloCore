@@ -12,6 +12,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Unit tests for the {@link HaloModConfig} command-system configuration.
  */
 class HaloModConfigTest {
+    @Test void previewPhysicsDefaultsOnAndOldFilesPreserveUnknownFieldsAndExplicitOptOut() {
+        var decoded = network.azusake.halo.core.ModConfigCodec.decode("{\"custom\":42}");
+        assertTrue(new HaloModConfig().isPlayerPreviewHaloPhysicsEnabled());
+        assertTrue(decoded.config().isPlayerPreviewHaloPhysicsEnabled());
+        var tree = com.google.gson.JsonParser.parseString(decoded.replacement()).getAsJsonObject();
+        assertTrue(tree.get("playerPreviewHaloPhysicsEnabled").getAsBoolean());
+        assertEquals(42, tree.get("custom").getAsInt());
+        decoded.config().setPlayerPreviewHaloPhysicsEnabled(false);
+        assertFalse(network.azusake.halo.core.ModConfigCodec.decode(
+            network.azusake.halo.core.ModConfigCodec.encode(decoded.config())).config().isPlayerPreviewHaloPhysicsEnabled());
+        var optedOut = network.azusake.halo.core.ModConfigCodec.decode("{\"playerPreviewHaloPhysicsEnabled\":false}");
+        assertFalse(optedOut.config().isPlayerPreviewHaloPhysicsEnabled());
+        assertFalse(com.google.gson.JsonParser.parseString(optedOut.replacement()).getAsJsonObject()
+            .get("playerPreviewHaloPhysicsEnabled").getAsBoolean());
+    }
 
     @Test
     @DisplayName("default commandPermissionLevel is 2")

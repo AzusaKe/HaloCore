@@ -12,7 +12,7 @@ import network.azusake.halo.api.v2.AnchorPose;
  * Camera up/right are expressed in that resulting view space, including any host reflection.
  * Pixel placement and projection belong to the host, not to the head pose.
  * Animation uses the owning client's most recent appearance frame; the supplied clocks identify
- * this view sample and are available for future independently simulated preview motion.
+ * this view sample. An opted-in physical session uses frameNanos for its independent motion.
  */
 public record PreviewFrame(UUID wearer, int runtimeId, AnchorPose head,
                            FrameScene.CameraSample camera, float[] rootTransform,

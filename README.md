@@ -1,4 +1,4 @@
-# HaloCore 2.2.0 (development)
+# HaloCore 2.2.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -21,7 +21,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
 | Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
 | Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
-| Player/UI previews | Optional `PreviewPort.openPreview()` → `PreviewSession.render(PreviewFrame)` → existing `FrameOutput` |
+| Player/UI previews | Optional `PreviewPort.openPreview([PreviewOptions])` → `PreviewSession.render(PreviewFrame)` → existing `FrameOutput` |
 | External anchors | unchanged `network.azusake.halo.api.v2` |
 | Config/diagnostics | `RuntimeConfigSnapshot`, `ClientStatus`, `Diagnostics.Sink` |
 
@@ -73,11 +73,11 @@ unchanged bytecode against the new core jar; the frozen interface is absent from
    of the preview's screen position. Use `PERSPECTIVE` for a perspective host camera. Do not include
    the projection matrix in the root transform; apply projection when submitting `FrameOutput`.
 5. Rendering consumes the **latest completed owning-client appearance snapshot**. Preview clock
-   fields describe the view sample and are reserved for future independent motion; they do not
+   fields describe the view sample; they do not
    advance or restart ownership, startup/shutdown, idle animation, sleep or invisibility state.
-   The rigid base follows the current head with no physics or damping; authored offsets, scales,
+   The default rigid base follows the current head with no physics or damping; authored offsets, scales,
    static rotations and visual animation continue through the shared primitive/material pipeline.
-   FREE/LOCKED/SYNC do not select different preview behavior. World physics, snap flags and
+   FREE/LOCKED/SYNC do not select different rigid-preview behavior. World physics, snap flags and
    `bodyPoses()` remain untouched.
 6. No matching appearance, unloaded/dead wearer, mismatched runtime ID or stale visual-resource
    generation produces empty output. Definition reload invalidates the previous snapshot until
@@ -85,9 +85,35 @@ unchanged bytecode against the new core jar; the frozen interface is absent from
    `clear()`, `replace()` and a world-token change invalidate existing sessions; create new sessions
    for the new client/world scope. `close()` is idempotent; closed or invalidated sessions stay empty.
 
+### Optional preview physics
+
+Use `openPreview(PreviewOptions.PHYSICS)` to opt in per view. The original `openPreview()` remains
+rigid. Older `PreviewPort` providers inherit a default overload supporting `RIGID` and rejecting
+unsupported physics explicitly; they need not implement new methods to keep their existing behavior.
+
+- Keep the session across frames. It owns its calculator, frame-time smoothing and orientation state;
+  it never reads or consumes the world instance's teleport/snap flag. Its head motion is measured in
+  preview scene blocks, before the GUI root matrix, so moving/rescaling a GUI does not create forces.
+- Physical views reuse the world calculator, parameter merge, linear/angular damping, angular
+  momentum, displacement limits, FREE/LOCKED/SYNC semantics and EMA time clamp. They share exactly
+  the same visual/geometry path as rigid views. This adds no independent physics configuration model.
+- Supply a monotonically increasing `frameNanos` per view sample. Repeated submissions of the same
+  sample retain the computed body; visual/GUI transforms may still change. A backward clock resets
+  motion. First use snaps to the current target as in the world. After a long interval the same world
+  delta clamp applies; hosts should call `resetMotion()` for discontinuous scene/model changes.
+- Switching wearer/runtime identity or definition, an unavailable appearance/resource generation,
+  and closing a session clear its motion. `resetMotion()` resets only the view, without replaying the
+  shared startup animation. `isValid()` reports closed/world-invalidated sessions so hosts can recreate
+  them. Both methods have defaults for old providers.
+
+The persisted flag defaults to `playerPreviewHaloPhysicsEnabled=true`; a platform may use it to select
+automatic preview sessions. Missing fields are backfilled; an explicit `false` selects rigid motion.
+Explicit API callers select their own `PreviewOptions`. No platform type
+or GUI identity enters core, and definition schema, storage, protocol and API v2 remain unchanged.
+
 The implementation snapshot (`render.HaloAppearance`) is internal, not an adapter API. Hosts never
 construct definition graphs, mutate `HaloInstance`, or use anchor API v2 to submit a UI-space pose.
-API v2 remains world-space only. Preview physics and third-party model capture can be added behind
+API v2 remains world-space only. Preview physics and third-party model capture live behind
 this independent capability without adding methods to older adapters' `ClientPort` implementations.
 
 ## Frame and coordinate contract
@@ -170,7 +196,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current source is **2.2.0 in development** and the latest tagged release remains **2.1.2**,
+Feature version is in `gradle.properties`; the current release is **2.2.0**,
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

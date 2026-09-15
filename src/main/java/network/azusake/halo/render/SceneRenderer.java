@@ -93,12 +93,7 @@ public final class SceneRenderer {
      */
     private final IdlePhaseTracker idlePhaseTracker = new IdlePhaseTracker();
 
-    /** Timestamp (nanoTime) of the previous render frame, for delta-time. */
-    private long prevFrameNanos;
-    /** Whether we have seen at least one frame. */
-    private boolean firstFrame = true;
-    /** EMA-smoothed frame delta-time, to suppress nanoTime jitter. */
-    private double smoothedDt = -1;
+    private final network.azusake.halo.physics.FrameDelta frameDelta = new network.azusake.halo.physics.FrameDelta();
 
     public SceneRenderer(ClientRuntime runtime) { this(runtime, id -> {}); }
     public SceneRenderer(ClientRuntime runtime, Consumer<Identifier> missingDefinitionWarning) {
@@ -122,7 +117,7 @@ public final class SceneRenderer {
     public void clearIdlePhases() { idlePhaseTracker.clear(); }
     public void clearWorld() {
         appearances.clear(); bodyPoses.clear(); clearIdlePhases(); frameCalculator.retainOnly(Set.of());
-        prevSleepHidden.clear(); prevInvisHidden.clear(); firstFrame=true; smoothedDt=-1;
+        prevSleepHidden.clear(); prevInvisHidden.clear(); frameDelta.reset();
         lastMissingDefWarningTime=null;
     }
 
@@ -160,25 +155,7 @@ public final class SceneRenderer {
         frameCalculator.retainOnly(activeUuids);
 
         // Compute frame delta with EMA smoothing to suppress nanoTime jitter
-        long frameNanos = scene.frameNanos();
-        double rawDt;
-        if (firstFrame) {
-            rawDt = 0.0;
-            firstFrame = false;
-        } else {
-            rawDt = (frameNanos - prevFrameNanos) / 1_000_000_000.0;
-            rawDt = Math.max(0.001, Math.min(rawDt, 0.1));
-        }
-        prevFrameNanos = frameNanos;
-
-        // EMA smoothing: blend raw frame-time into a rolling average
-        if (smoothedDt < 0) {
-            smoothedDt = rawDt;
-        } else {
-            // Weight new frame at 20% — smooth but responsive
-            smoothedDt = smoothedDt * 0.8 + rawDt * 0.2;
-        }
-        final double dt = smoothedDt;
+        final double dt = frameDelta.advance(scene.frameNanos());
 
         for (HaloInstance instance : visible) {
             try {
@@ -409,11 +386,15 @@ public final class SceneRenderer {
 
     /** Geometry-only entry point. Sessions have their own collector; shared client state is read-only. */
     public FrameOutput renderPreview(PreviewFrame input, HaloAppearance appearance) {
+        return renderPreview(input, appearance, AnchorFrameCalculator.rigid(input.head(), appearance.definition(),
+            input.camera().position(), runtime.getConfig()));
+    }
+
+    /** Both motion choices feed the exact same visual/geometry path. */
+    public FrameOutput renderPreview(PreviewFrame input, HaloAppearance appearance, AnchorFrame frame) {
         parallelFacing = input.projection() == PreviewFrame.Projection.ORTHOGRAPHIC;
         draw = new GeometryCollector(input.textures());
         meshDraw.begin(input.visuals());
-        AnchorFrame frame = AnchorFrameCalculator.rigid(input.head(), appearance.definition(),
-            input.camera().position(), runtime.getConfig());
         renderAppearance(appearance, frame, new MatrixStack(input.rootTransform()), input.camera(), input.light(), 1f);
         return meshDraw.finish(draw.batches());
     }

@@ -12,6 +12,164 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PreviewRuntimeTest {
+    @Test void physicalPreviewMatchesWorldForAllModesAndFrameTimes() {
+        for (String mode : List.of("free", "locked", "sync")) {
+            var client = client("\"orientation_mode\":\"" + mode + "\",", MIXED);
+            var config = new network.azusake.halo.config.HaloConfig();
+            config.setAllowAngularMomentum(true);
+            config.setAngularMomentumFactor(.08);
+            config.setLinearDampingFactor(.12);
+            config.setPositionOffset(new Vec3d(.2, .5, -.1));
+            config.setHaloScale(1.3);
+            client.setConfig(config);
+            try (var physical = client.openPreview(PreviewOptions.PHYSICS)) {
+                for (int frame = 0; frame < 28; frame++) {
+                    time.addAndGet(new int[]{16,8,33,7,99,250,4}[frame % 7]);
+                    var head = pose(frame * .025, Math.sin(frame * .3) * .1, .1,
+                        new Quaternionf().rotateXYZ(frame * .03f, frame * .08f, frame * -.05f));
+                    var world = client.renderFrame(world(head, false, false, true, 1, ASSETS));
+                    assertEquals(expanded(world), expanded(physical.render(preview(head, new Matrix4f(), ASSETS))),
+                        mode + " frame " + frame);
+                }
+            }
+        }
+    }
+
+    @Test void persistentPhysicalViewsDoNotAffectWorldOrEachOtherAndDuplicatesDoNotAdvance() {
+        var baseline = client("", MIXED);
+        var extra = client("", MIXED);
+        try (var first = extra.openPreview(PreviewOptions.PHYSICS);
+             var second = extra.openPreview(PreviewOptions.PHYSICS)) {
+            for (int frame = 0; frame < 15; frame++) {
+                time.addAndGet(16);
+                var worldHead = pose(frame * .02, 0, 0, new Quaternionf().rotateY(frame * .1f));
+                var sample = world(worldHead, false, false, true, 1, ASSETS);
+                assertEquals(expanded(baseline.renderFrame(sample)), expanded(extra.renderFrame(sample)));
+                var bodies = extra.bodyPoses();
+                var status = extra.diagnostics();
+                baseline.teleport(WEARER); extra.teleport(WEARER);
+                var input = preview(pose(frame * -.03, .2, 0, new Quaternionf()), new Matrix4f(), ASSETS);
+                var before = expanded(first.render(input));
+                for (int repeat = 0; repeat < 5; repeat++) {
+                    second.render(preview(pose(10, frame * .4, 0, new Quaternionf().rotateX(.8f)), new Matrix4f(), ASSETS));
+                    assertEquals(before, expanded(first.render(input)));
+                }
+                assertEquals(bodies, extra.bodyPoses());
+                assertTrue(extra.getInstance(WEARER).isNeedsSnap());
+                assertEquals(status.get(WEARER).createdAt(), extra.diagnostics().get(WEARER).createdAt());
+            }
+        }
+    }
+
+    @Test void physicalMotionLagsAndResetsWithoutRestartingAppearance() {
+        var client = client("", "{\"primitive\":" + BILLBOARD + "}");
+        client.renderFrame(world());
+        try (var physical = client.openPreview(PreviewOptions.PHYSICS); var rigid = client.openPreview()) {
+            physical.render(preview());
+            time.addAndGet(16);
+            var input = preview(pose(.25, 0, 0, new Quaternionf()), new Matrix4f(), ASSETS);
+            var moving = expanded(physical.render(input));
+            var snapped = expanded(rigid.render(input));
+            double x = moving.get(0).vertices().stream().mapToDouble(DrawBatch.Vertex::x).average().orElseThrow();
+            assertTrue(x > 0 && x < .25, "expected positional lag: " + x);
+            assertNotEquals(snapped, moving);
+            var status = client.diagnostics();
+            physical.resetMotion();
+            try (var fresh = client.openPreview(PreviewOptions.PHYSICS)) {
+                assertEquals(expanded(fresh.render(input)), expanded(physical.render(input)));
+            }
+            assertEquals(status, client.diagnostics());
+        }
+    }
+
+    @Test void physicalSessionRecoversAfterHiddenFramesAndOwnerReplacementAndInvalidatesWithWorld() {
+        var client = client("", MIXED);
+        client.renderFrame(world());
+        try (var physical = client.openPreview(PreviewOptions.PHYSICS)) {
+            physical.render(preview());
+            time.addAndGet(16);
+            var input = preview(pose(3, 1, 0, new Quaternionf().rotateY(.8f)), new Matrix4f(), ASSETS);
+            physical.render(input);
+            client.unload(WEARER);
+            assertTrue(empty(physical.render(input)));
+            client.renderFrame(world());
+            try (var fresh = client.openPreview(PreviewOptions.PHYSICS)) {
+                assertEquals(expanded(fresh.render(input)), expanded(physical.render(input)));
+            }
+            client.replace(Map.of(WEARER, ID));
+            assertFalse(physical.isValid());
+            assertTrue(empty(physical.render(input)));
+        }
+        var closed = client.openPreview(PreviewOptions.PHYSICS);
+        closed.close(); closed.close();
+        assertFalse(closed.isValid());
+    }
+
+    @Test void defaultPreviewOptionsDoNotRequireOldProvidersToImplementPhysics() {
+        PreviewPort legacy = () -> new PreviewSession() {
+            public FrameOutput render(PreviewFrame frame) { return new FrameOutput(1, List.of(), List.of()); }
+            public void close() {}
+        };
+        try (var session = legacy.openPreview(PreviewOptions.RIGID)) {
+            assertTrue(session.isValid());
+            session.resetMotion();
+        }
+        assertThrows(UnsupportedOperationException.class, () -> legacy.openPreview(PreviewOptions.PHYSICS));
+    }
+
+    @Test void physicalMotionIgnoresCameraAndGuiRootChanges() {
+        var client = client("", MIXED);
+        client.renderFrame(world());
+        try (var plain = client.openPreview(PreviewOptions.PHYSICS); var moved = client.openPreview(PreviewOptions.PHYSICS)) {
+            for (int step = 0; step < 12; step++) {
+                time.addAndGet(16);
+                var head = pose(.2 * Math.sin(step), .05 * step, 0, new Quaternionf().rotateXYZ(.1f * step, .05f * step, 0));
+                var camera = new FrameScene.CameraSample(new Vec3d(step * .2, -1, 2), CAMERA.up(), CAMERA.right());
+                var root = new Matrix4f().translate(300 + step, -200, 100).scale(30, -30, 30);
+                var a = expanded(plain.render(preview(head, new Matrix4f(), ASSETS)));
+                var b = expanded(moved.render(new PreviewFrame(WEARER, 1, head, camera, root.get(new float[16]),
+                    time.get(), time.get() * 1_000_000, LightSample.FULL_BRIGHT, id -> true, ASSETS)));
+                assertEquals(a.size(), b.size());
+                var inverse = new Matrix4f(root).invert();
+                for (int batch = 0; batch < a.size(); batch++) {
+                    Vector3f ac = new Vector3f(), bc = new Vector3f();
+                    for (var v : a.get(batch).vertices()) ac.add(v.x(), v.y(), v.z());
+                    for (var v : b.get(batch).vertices()) bc.add(inverse.transformPosition(new Vector3f(v.x(), v.y(), v.z())));
+                    ac.div(a.get(batch).vertices().size()); bc.div(b.get(batch).vertices().size());
+                    bc.add((float)camera.position().x, (float)camera.position().y, (float)camera.position().z);
+                    assertTrue(ac.distance(bc) < 2e-5, ac + " != " + bc);
+                }
+            }
+        }
+    }
+
+    @Test void resourceLossDefinitionReplacementAndBackwardClockResetOnlyPreviewMotion() {
+        var client = client("", MIXED);
+        client.renderFrame(world());
+        try (var physical = client.openPreview(PreviewOptions.PHYSICS)) {
+            physical.render(preview());
+            time.addAndGet(16);
+            var head = pose(2, .5, 0, new Quaternionf().rotateZ(.8f));
+            physical.render(preview(head, new Matrix4f(), ASSETS));
+            var original = client.definition(ID).orElseThrow();
+            client.definitions(Map.of()); client.renderFrame(world());
+            assertTrue(empty(physical.render(preview())));
+            client.definitions(Map.of(ID, original)); client.renderFrame(world());
+            var input = preview(head, new Matrix4f(), ASSETS);
+            try (var fresh = client.openPreview(PreviewOptions.PHYSICS)) {
+                assertEquals(expanded(fresh.render(input)), expanded(physical.render(input)));
+            }
+            time.addAndGet(16); physical.render(preview());
+            time.addAndGet(-100);
+            var backwards = preview(head, new Matrix4f(), ASSETS);
+            var status = client.diagnostics();
+            try (var fresh = client.openPreview(PreviewOptions.PHYSICS)) {
+                assertEquals(expanded(fresh.render(backwards)), expanded(physical.render(backwards)));
+            }
+            assertEquals(status, client.diagnostics());
+        }
+    }
+
     private static final UUID WEARER = new UUID(0, 1);
     private static final Identifier ID = new Identifier("halo:test"), MODEL = new Identifier("halo:test.obj"),
         TEX = new Identifier("halo:test.png"), MASK = new Identifier("halo:mask.png");

@@ -118,7 +118,16 @@ public final class AnchorFrameCalculator {
         double frameDt,
         HaloConfig runtime
     ) {
-        UUID uuid = instance.getEntityUuid();
+        boolean needsSnap = instance.isNeedsSnap();
+        AnchorFrame result = calculate(instance.getEntityUuid(), needsSnap, pose, fallbackPose,
+            definition, cameraPosition, frameDt, runtime);
+        if (needsSnap) instance.setNeedsSnap(false);
+        return result;
+    }
+
+    /** Motion-only entry point. Callers own their calculator and snap state, never a world lifecycle. */
+    public AnchorFrame calculate(UUID uuid, boolean needsSnap, AnchorPose pose, AnchorPose fallbackPose,
+                                 HaloDefinition definition, Vec3d cameraPosition, double frameDt, HaloConfig runtime) {
 
         // Hold the last good pose if an integration ever returns transient bad data.
         if (!isFinite(pose)) {
@@ -140,12 +149,8 @@ public final class AnchorFrameCalculator {
 
         // 4. Frame-rate-independent position damping
         Vec3d prevPos = prevFramePos.get(uuid);
-        boolean needsSnap = instance.isNeedsSnap();
         if (prevPos == null || needsSnap) {
             prevPos = targetPos;
-            if (needsSnap) {
-                instance.setNeedsSnap(false);
-            }
         }
 
         double k = Math.max(0.001, Math.min(damping.linearFactor(), 0.999));
