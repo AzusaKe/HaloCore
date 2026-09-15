@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.3.0 — unreleased
+## 2.3.0 — 2026-09-15
 
 - Extend the Java 17 / loader-neutral `api.v2` with preview submission and a separate host bridge.
   Share one HaloAnchorApi registration and AnchorSource lifecycle across both render spaces.
