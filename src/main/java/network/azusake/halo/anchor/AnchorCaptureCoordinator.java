@@ -4,6 +4,8 @@ import network.azusake.halo.api.v2.AnchorPose;
 import network.azusake.halo.api.v2.AnchorRotation;
 import network.azusake.halo.api.v2.AnchorSource;
 import network.azusake.halo.api.v2.AnchorVec3;
+import network.azusake.halo.api.v2.PreviewAnchorContext;
+import network.azusake.halo.api.v2.PreviewAnchorPose;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -124,7 +126,7 @@ public final class AnchorCaptureCoordinator {
     }
 
     private static synchronized boolean submit(SourceHandle source, UUID entityUuid, AnchorPose pose) {
-        if (source.closed || entityUuid == null || pose == null) {
+        if (source.closed || entityUuid == null || pose == null || PreviewAnchorCoordinator.isPreviewRendering()) {
             return false;
         }
         Deque<EntityScope> scopes = SCOPES.get();
@@ -156,6 +158,7 @@ public final class AnchorCaptureCoordinator {
             return;
         }
         source.closed = true;
+        source.preview.close();
         SOURCES.remove(source.sourceId, source);
         Iterator<CapturedPose> iterator = CAPTURES.values().iterator();
         while (iterator.hasNext()) {
@@ -167,6 +170,7 @@ public final class AnchorCaptureCoordinator {
 
     private static final class SourceHandle implements AnchorSource {
         private final String sourceId;
+        private final PreviewAnchorCoordinator.Source preview = new PreviewAnchorCoordinator.Source();
         private volatile boolean closed;
 
         private SourceHandle(String sourceId) {
@@ -176,6 +180,11 @@ public final class AnchorCaptureCoordinator {
         @Override
         public boolean submit(UUID entityUuid, AnchorPose pose) {
             return AnchorCaptureCoordinator.submit(this, entityUuid, pose);
+        }
+
+        @Override
+        public boolean submitPreview(PreviewAnchorContext context, PreviewAnchorPose pose) {
+            return preview.submit(context, pose);
         }
 
         @Override

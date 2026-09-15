@@ -32,3 +32,35 @@ tasks.register('verifyLegacyClientAdapter', JavaExec) {
     mainClass = 'compat.LegacyClientAdapter'
 }
 tasks.named('check') { dependsOn 'verifyLegacyClientAdapter' }
+
+tasks.register('previewAnchorApiFixtureJar', Jar) {
+    dependsOn 'classes'
+    from(sourceSets.main.output) {
+        include 'network/azusake/halo/api/v2/**'
+    }
+    archiveFileName = 'preview-anchor-api.jar'
+    destinationDirectory = layout.buildDirectory.dir('compat')
+}
+tasks.register('compilePreviewProvider', JavaCompile) {
+    dependsOn 'previewAnchorApiFixtureJar'
+    source = fileTree('src/testFixtures/preview-provider') { include '**/*.java' }
+    // Deliberately excludes host and implementation classes from the compilation classpath.
+    classpath = files(tasks.named('previewAnchorApiFixtureJar').flatMap { it.archiveFile })
+    destinationDirectory = layout.buildDirectory.dir('compat/preview-provider')
+}
+tasks.register('compilePreviewHostConsumer', JavaCompile) {
+    dependsOn 'compilePreviewProvider', 'jar'
+    source = fileTree('src/testFixtures/preview-host') { include '**/*.java' }
+    classpath = files(tasks.named('jar').flatMap { it.archiveFile },
+        tasks.named('compilePreviewProvider').flatMap { it.destinationDirectory })
+    destinationDirectory = layout.buildDirectory.dir('compat/preview-host')
+}
+tasks.register('verifyExternalPreviewProvider', JavaExec) {
+    group = 'verification'
+    dependsOn 'compilePreviewHostConsumer'
+    classpath = files(tasks.named('jar').flatMap { it.archiveFile },
+        tasks.named('compilePreviewProvider').flatMap { it.destinationDirectory },
+        tasks.named('compilePreviewHostConsumer').flatMap { it.destinationDirectory })
+    mainClass = 'compat.PreviewHostConsumer'
+}
+tasks.named('check') { dependsOn 'verifyExternalPreviewProvider' }

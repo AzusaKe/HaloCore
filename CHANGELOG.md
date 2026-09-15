@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.0 — unreleased
+
+- Extend the Java 17 / loader-neutral `api.v2` with preview submission and a separate host bridge.
+  Share one HaloAnchorApi registration and AnchorSource lifecycle across both render spaces.
+  Bind submissions to lexical preview contexts, real wearers and optional proxy render entities.
+- Move provider/fallback selection, nested entity/view isolation, source lifetime and thread checks
+  into core. Reject expired/suspended contexts; retain render routing until invalidated scopes close.
+- Prevent GUI submissions from overwriting an enclosing world API v2 capture. Preserve world API
+  signatures, preview rendering contracts, physics, definition schema, storage and protocol.
+- Compile an external provider with only the public API classes, then run it against the built core
+  jar + JDK; add scope, proxy, arbitration, reset, thread and world-isolation regression coverage.
+- Clarify the separate world/preview coordinate, arbitration and lifetime contracts. Minecraft's
+  former HaloPreviewApi facade is no longer a supported integration; hosts use the neutral core ports.
+
+- Permit world-only and preview-only use without affecting the other space. Test independent
+  sources, shared-handle cleanup and re-registration; remove the standalone preview API package.
+
 ## 2.2.0 — 2026-09-15
 
 - Add optional `PreviewPort`, closeable `PreviewSession` and platform-neutral `PreviewFrame` inputs;

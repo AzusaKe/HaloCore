@@ -1,4 +1,4 @@
-# HaloCore 2.2.0
+# HaloCore 2.3.0 (development)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -22,7 +22,8 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
 | Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
 | Player/UI previews | Optional `PreviewPort.openPreview([PreviewOptions])` → `PreviewSession.render(PreviewFrame)` → existing `FrameOutput` |
-| External anchors | unchanged `network.azusake.halo.api.v2` |
+| Head anchors | unified `network.azusake.halo.api.v2.HaloAnchorApi` for world and preview |
+| Preview anchor providers | `api.v2.AnchorSource.submitPreview` and the neutral `PreviewAnchorHost` bridge |
 | Config/diagnostics | `RuntimeConfigSnapshot`, `ClientStatus`, `Diagnostics.Sink` |
 
 These contracts use core/JDK value types. `data`, `animation`, `physics`, `shape`, `render`,
@@ -47,6 +48,61 @@ one warning per 30 seconds across all entities; the first warning is immediate. 
 localized chat or other feedback. World/session resets clear the throttle, and reloading definitions
 allows rendering to resume without reattaching the halo. The existing constructors remain available
 for hosts that only need diagnostic logging. Callbacks must not mutate the runtime during rendering.
+
+## Preview anchor providers (since 2.3.0)
+
+The unified loader-neutral head-anchor API is `network.azusake.halo.api.v2`:
+`HaloAnchorApi.register(id)` returns a closeable `AnchorSource`. In the model's render hook,
+read `currentPreviewContext()` and call `source.submitPreview(context, pose)` with a `PreviewAnchorPose` after the real head transform is final.
+Providers never own a physics session, resources or GPU submission. Compile against Halo's API;
+do not bundle duplicate API/core classes into a compatibility mod.
+
+Providers require Halo/core 2.3.0 or newer and should declare that minimum in their loader metadata.
+The v2 package keeps its existing class names, method descriptors, constructors and coordinate/lifetime
+semantics across future platform adapters. Extend it additively; incompatible contracts need a new
+API namespace while the published v2 contract remains available. Game-specific model hooks may still need separate builds.
+
+The context identifies both the real wearer and the rendered entity (a UI proxy may differ), and
+one lexical draw invocation. It supplies a copied column-major `sceneToView` matrix without projection.
+Pose positions are in block-sized preview scene space before that matrix, without GUI scale/mirror,
+halo offsets or physics; `AnchorRotation` retains +Y head-up / +Z head-forward. Do not submit world
+coordinates or pixel coordinates. Contexts cannot be forged or retained for later frames.
+
+The first valid model submission wins over vanilla fallbacks. Later submissions return false;
+closing the winner invalidates its current contribution, allowing fallback or a new submission.
+Rendered fallback takes precedence over posed-only fallback, each accepting its first valid sample.
+Wrong-thread, unrelated-entity, closed, stale and suspended outer-view submissions are rejected.
+`isPreviewRendering()` also covers unrelated entity draws and invalidated scopes still unwinding;
+`currentPreviewContext()` is null there. Source registration survives view/world changes until closed.
+
+Hosts use one `core.runtime.PreviewAnchorHost` per logical client and a try-with-resources
+`PreviewAnchorScope` per draw. Bracket the entity dispatcher with the host's begin/end hooks,
+submit vanilla fallbacks, then consume `resolved()` in the existing preview rendering pipeline.
+The host has an overload mapping wearer UUID/runtime ID to a separate rendered UUID/runtime ID.
+For a nonzero preview camera, supply the full `sceneToView = rootTransform * Translate(-camera.position)`
+using column vectors: `PreviewFrame` subtracts camera position before applying its root. Vanilla GUI
+uses a zero camera, so the matrices coincide. Projection is excluded from both matrices.
+`clear()` invalidates contributions immediately; lexical scopes must still close in reverse order
+on the owning thread so interrupted GUI renders cannot fall through into a world scope.
+
+No public contract contains Minecraft, loader, Mixin or JOML types. The former Minecraft-specific
+`HaloPreviewApi` facade is removed in 2.3.0; platform drawing helpers are adapter internals.
+An independent provider fixture compiles with only public API classes and runs with the core jar
+and JDK alone. These interfaces do not require frozen or older adapters to implement previews.
+
+One `HaloAnchorApi.register(id)` returns one `AnchorSource` for either or both render spaces.
+World-only providers call `submit(uuid, worldPose)`; preview-only providers call `submitPreview`.
+The untouched space is unaffected: no automatic pose copy, fallback suppression or cross-cache writes.
+The first preview model submission wins; world samples retain their last-accepted-sample rule and
+current/previous-frame entity cache. GUI world submissions are rejected, even inside a world scope.
+All public types live in `api.v2`; the separate preview API package and entry point are removed.
+
+Source IDs are unique across both spaces. `close()` invalidates only this source's contributions in
+both spaces. Use different IDs when world and preview need independent disposal. Closing an old
+handle after re-registration does not invalidate the replacement. Built-in YSM/EMF providers share
+one handle each between their world and preview hooks. Core's PreviewFrame reuses AnchorPose as
+a value with preview-space semantics; both paths share appearance, physics, animation and geometry
+implementations while motion and capture state remain isolated.
 
 ## Preview contract (since 2.2.0)
 
@@ -196,7 +252,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current release is **2.2.0**,
+Feature version is in `gradle.properties`; the current source is **2.3.0 in development**;
+the latest tagged release remains **2.2.0**,
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

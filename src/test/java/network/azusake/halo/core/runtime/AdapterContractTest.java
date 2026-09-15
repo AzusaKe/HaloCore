@@ -51,6 +51,11 @@ class AdapterContractTest {
     @Test void stablePortSignaturesDoNotExposeMathOrJsonLibraries() {
         for (Class<?> type : List.of(ClientPort.class, ResourceInput.class, DefinitionSnapshot.class,
                 PreviewPort.class, PreviewSession.class, PreviewOptions.class, PreviewFrame.class,
+                PreviewAnchorHost.class, PreviewAnchorScope.class,
+                network.azusake.halo.api.v2.HaloAnchorApi.class,
+                network.azusake.halo.api.v2.PreviewAnchorContext.class,
+                network.azusake.halo.api.v2.AnchorSource.class,
+                network.azusake.halo.api.v2.PreviewAnchorPose.class,
                 BodyPose.class, FrameScene.class, FrameOutput.class, DrawBatch.class, MeshDraw.class,
                 MeshIndexWriter.class, RuntimeConfigSnapshot.class,
                 TriangleMesh.class, VisualResources.class, VisualResources.TextureInfo.class,
