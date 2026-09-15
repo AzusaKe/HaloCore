@@ -11,7 +11,7 @@ import network.azusake.halo.render.IdlePhaseTracker;
 import network.azusake.halo.render.SceneRenderer;
 
 /** One logical client. Authority replicas outlive entity/render instances. Never shared with a server. */
-public final class ClientRuntime implements ClientPort {
+public final class ClientRuntime implements ClientPort, PreviewPort {
     private final Map<UUID,Identifier> assignments = new LinkedHashMap<>();
     private final Map<UUID,HaloInstance> visuals = new LinkedHashMap<>();
     private final Map<UUID,Integer> entityIds = new HashMap<>();
@@ -22,6 +22,26 @@ public final class ClientRuntime implements ClientPort {
     private Map<Identifier,HaloDefinition> definitionInput;
     private HaloConfig config=new HaloConfig();
     private final SceneRenderer renderer;
+    private long previewEpoch;
+    private long visualGeneration = Long.MIN_VALUE;
+
+    @Override public PreviewSession openPreview() {
+        final long epoch = previewEpoch;
+        return new PreviewSession() {
+            private SceneRenderer viewRenderer = new SceneRenderer(ClientRuntime.this);
+            @Override public FrameOutput render(PreviewFrame frame) {
+                Objects.requireNonNull(frame);
+                var appearance = renderer.appearance(frame.wearer());
+                if (viewRenderer == null || epoch != previewEpoch || appearance == null
+                        || !Objects.equals(entityIds.get(frame.wearer()), frame.runtimeId())
+                        || visualGeneration != frame.visuals().generation()) {
+                    return new FrameOutput(frame.visuals().generation(), List.of(), List.of());
+                }
+                return viewRenderer.renderPreview(frame, appearance);
+            }
+            @Override public void close() { viewRenderer = null; }
+        };
+    }
     public ClientRuntime() { this(System::currentTimeMillis); }
     public ClientRuntime(LongSupplier clock) { this(clock, id -> {}); }
     /** The warning callback runs on the owning client thread; the host handles localized feedback. */
@@ -37,6 +57,7 @@ public final class ClientRuntime implements ClientPort {
     public void definitions(Map<Identifier,HaloDefinition> value) {
         if (definitionInput == value) return;
         definitionInput=value;
+        renderer.clearAppearances();
         definitions=Map.copyOf(value); visuals.values().forEach(HaloInstance::invalidateDefinition);
     }
     public Optional<HaloDefinition> definition(Identifier id) { return Optional.ofNullable(definitions.get(id)); }
@@ -66,7 +87,7 @@ public final class ClientRuntime implements ClientPort {
     public void unload(UUID uuid) { removeClientHalo(uuid); entityIds.remove(uuid); }
     public void died(UUID uuid, boolean player) { unload(uuid); if (!player) assignments.remove(uuid); }
     public void teleport(UUID uuid) { HaloInstance v=visuals.get(uuid); if(v!=null)v.markTeleported(); }
-    public void clear() { assignments.clear(); visuals.clear(); entityIds.clear(); renderer.clearWorld(); worldToken=Long.MIN_VALUE; }
+    public void clear() { previewEpoch++; assignments.clear(); visuals.clear(); entityIds.clear(); renderer.clearWorld(); worldToken=Long.MIN_VALUE; }
     public HaloInstance getInstance(UUID uuid) { return visuals.get(uuid); }
     public Collection<HaloInstance> getAllInstances() { return visuals.values(); }
     public Map<UUID,HaloInstance> getActiveHalos() { return Map.copyOf(visuals); }
@@ -82,7 +103,7 @@ public final class ClientRuntime implements ClientPort {
         frameTime=scene.timeMillis();
         try {
             if(worldToken!=scene.worldToken()) {
-                if(worldToken!=Long.MIN_VALUE) { visuals.clear(); entityIds.clear(); renderer.clearWorld(); }
+                if(worldToken!=Long.MIN_VALUE) { previewEpoch++; visuals.clear(); entityIds.clear(); renderer.clearWorld(); }
                 worldToken=scene.worldToken();
             }
             var gone = visuals.keySet().stream().filter(uuid -> !scene.entities().containsKey(uuid)
@@ -96,6 +117,7 @@ public final class ClientRuntime implements ClientPort {
             assignments.forEach((uuid,id)-> {
                 if(scene.entities().containsKey(uuid) && scene.entities().get(uuid).alive()) visuals.computeIfAbsent(uuid,k->new HaloInstance(k,id,this::nowMillis));
             });
+            visualGeneration=scene.visuals().generation();
             return renderer.renderHalos(scene);
         } finally { frameTime=null; }
     }

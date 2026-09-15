@@ -1,4 +1,4 @@
-# HaloCore 2.1.2
+# HaloCore 2.2.0 (development)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -21,6 +21,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
 | Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
 | Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
+| Player/UI previews | Optional `PreviewPort.openPreview()` → `PreviewSession.render(PreviewFrame)` → existing `FrameOutput` |
 | External anchors | unchanged `network.azusake.halo.api.v2` |
 | Config/diagnostics | `RuntimeConfigSnapshot`, `ClientStatus`, `Diagnostics.Sink` |
 
@@ -46,6 +47,48 @@ one warning per 30 seconds across all entities; the first warning is immediate. 
 localized chat or other feedback. World/session resets clear the throttle, and reloading definitions
 allows rendering to resume without reattaching the halo. The existing constructors remain available
 for hosts that only need diagnostic logging. Callbacks must not mutate the runtime during rendering.
+
+## Preview contract (since 2.2.0)
+
+`ClientRuntime` additionally implements `PreviewPort`. The original `ClientPort`, `FrameScene`,
+draw-command signatures and constructors remain available. An older adapter need not implement or
+call the preview API. `check` compiles a caller against the frozen 2.1.2 `ClientPort` and runs that
+unchanged bytecode against the new core jar; the frozen interface is absent from the runtime classpath.
+
+1. Advance the owning client once per logical render frame using its normal `renderFrame` (or legacy
+   `render`) call. Include loaded wearers in `FrameScene.entities` even when their world models are
+   outside the camera or the local player is in first person. Appearance sampling precedes world
+   distance culling. Calling both world entry points for one frame would advance the simulation twice.
+2. Each UI view owns one `PreviewSession`, acquired with `openPreview()` and closed when that view
+   ends. The session itself is the view identity; multiple sessions may render the same UUID. Calls
+   must use the owning client's thread. Nested views use separate sessions.
+3. Supply the wearer's UUID **and current entity runtime ID**, actual preview head `AnchorPose`,
+   camera, root matrix, full-bright/native `LightSample`, texture availability and `VisualResources`.
+   The pose is in a host-defined scene measured in blocks, with the existing local +Y head-up / +Z
+   head-forward quaternion contract. GUI pixels, projection and mirror/scale belong to the adapter.
+   Core subtracts `camera.position` in scene coordinates before applying the column-major 4×4
+   `rootTransform`. The resulting coordinates are view space, with more negative Z farther away;
+   camera up/right are in that resulting space. A GUI typically uses camera position zero.
+4. `Projection.ORTHOGRAPHIC` is the default: `face_camera` uses a parallel camera basis, independent
+   of the preview's screen position. Use `PERSPECTIVE` for a perspective host camera. Do not include
+   the projection matrix in the root transform; apply projection when submitting `FrameOutput`.
+5. Rendering consumes the **latest completed owning-client appearance snapshot**. Preview clock
+   fields describe the view sample and are reserved for future independent motion; they do not
+   advance or restart ownership, startup/shutdown, idle animation, sleep or invisibility state.
+   The rigid base follows the current head with no physics or damping; authored offsets, scales,
+   static rotations and visual animation continue through the shared primitive/material pipeline.
+   FREE/LOCKED/SYNC do not select different preview behavior. World physics, snap flags and
+   `bodyPoses()` remain untouched.
+6. No matching appearance, unloaded/dead wearer, mismatched runtime ID or stale visual-resource
+   generation produces empty output. Definition reload invalidates the previous snapshot until
+   the next world frame. Missing definitions preserve ownership so it can recover after reload.
+   `clear()`, `replace()` and a world-token change invalidate existing sessions; create new sessions
+   for the new client/world scope. `close()` is idempotent; closed or invalidated sessions stay empty.
+
+The implementation snapshot (`render.HaloAppearance`) is internal, not an adapter API. Hosts never
+construct definition graphs, mutate `HaloInstance`, or use anchor API v2 to submit a UI-space pose.
+API v2 remains world-space only. Preview physics and third-party model capture can be added behind
+this independent capability without adding methods to older adapters' `ClientPort` implementations.
 
 ## Frame and coordinate contract
 
@@ -127,7 +170,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current source version and latest tagged release are **2.1.2**,
+Feature version is in `gradle.properties`; the current source is **2.2.0 in development** and the latest tagged release remains **2.1.2**,
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

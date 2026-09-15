@@ -11,3 +11,24 @@ test { useJUnitPlatform() }
 publishing { publications { mavenJava(MavenPublication) { from components.java } } }
 
 apply from: "gradle/boundaries.gradle"
+
+tasks.register('compileLegacyClientPort', JavaCompile) {
+    dependsOn 'classes'
+    source = fileTree('src/testFixtures/client-port-2.1.2') { include '**/*.java' }
+    classpath = sourceSets.main.output + configurations.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/client-port-2.1.2')
+}
+tasks.register('compileLegacyClientAdapter', JavaCompile) {
+    dependsOn 'compileLegacyClientPort'
+    source = fileTree('src/testFixtures/client-port-consumer') { include '**/*.java' }
+    classpath = files(tasks.named('compileLegacyClientPort').flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/client-port-consumer')
+}
+tasks.register('verifyLegacyClientAdapter', JavaExec) {
+    group = 'verification'
+    dependsOn 'compileLegacyClientAdapter', 'jar'
+    classpath = files(tasks.named('compileLegacyClientAdapter').flatMap { it.destinationDirectory },
+        tasks.named('jar').flatMap { it.archiveFile }) + configurations.runtimeClasspath
+    mainClass = 'compat.LegacyClientAdapter'
+}
+tasks.named('check') { dependsOn 'verifyLegacyClientAdapter' }

@@ -19,6 +19,12 @@ public class HaloModConfig {
     /** Permission level required by the {@code /halo} command tree.  Clamped to [0, 4]. */
     private int commandPermissionLevel = 2;
 
+    /** Client-only player previews using the host's inventory entity renderer. */
+    private boolean playerPreviewHaloEnabled = true;
+
+    public boolean isPlayerPreviewHaloEnabled() { return playerPreviewHaloEnabled; }
+    public void setPlayerPreviewHaloEnabled(boolean value) { playerPreviewHaloEnabled = value; }
+
     /**
      * Experimental YSM 2.6.5 render-anchor capture. Enabled by default after
      * compatibility validation; users may opt out in halo_mod_config.json.

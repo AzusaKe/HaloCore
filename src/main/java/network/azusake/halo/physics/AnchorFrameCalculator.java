@@ -81,6 +81,23 @@ public final class AnchorFrameCalculator {
     // Public API
     // ------------------------------------------------------------------
 
+    /** Stateless head attachment. No damping caches, orientation-mode state or snap flags are touched. */
+    public static AnchorFrame rigid(AnchorPose pose, HaloDefinition definition,
+                                    Vec3d cameraPosition, HaloConfig runtime) {
+        Vec3d localOffset = computeHeadRelativeOffset(new Quaternionf(), getEffectiveOffset(definition, runtime));
+        Vec3d radial = localOffset.normalize();
+        if (radial.lengthSquared() == 0) radial = new Vec3d(0, 1, 0);
+        Vec3d toHead = radial.multiply(-1);
+        Quaternionf look = computeLookAtOrientation(toHead);
+        Quaternionf rest = computeLockedSpin(look, toHead, new Vec3d(0, 1, 0), radial).mul(look);
+        rest = new Quaternionf(definition.model().syncOffset()).mul(rest);
+        Quaternionf head = toQuaternion(pose.rotation());
+        Quaternionf rotation = new Quaternionf(head).mul(rest);
+        Vec3d position = toVec3d(pose.position()).add(rotate(localOffset, head));
+        return new AnchorFrame(position, position.subtract(cameraPosition), rotation,
+            rotate(new Vec3d(0, 0, 1), rotation), rotate(toHead, head), getRuntimeScaleOverride(definition, runtime));
+    }
+
     /**
      * Compute the world-space anchor frame for one halo instance this frame.
      *

@@ -53,12 +53,15 @@ public final class SceneRenderer {
     private final ClientRuntime runtime;
     private final Consumer<Identifier> missingDefinitionWarning;
     private GeometryCollector draw;
+    private boolean parallelFacing;
     private final MeshGeometryRenderer meshDraw = new MeshGeometryRenderer(message -> LOG.warn("[Halo mesh] {}", message));
-    private FrameScene scene;
+    private final Map<UUID, HaloAppearance> appearances = new LinkedHashMap<>();
+    public HaloAppearance appearance(UUID wearer) { return appearances.get(wearer); }
+    public void clearAppearances() { appearances.clear(); }
     private final Map<UUID,BodyPose> bodyPoses = new LinkedHashMap<>();
     public Map<UUID,BodyPose> bodyPoses() { return Map.copyOf(bodyPoses); }
     public void clearEntity(UUID uuid) {
-        frameCalculator.clearEntity(uuid); idlePhaseTracker.remove(uuid); bodyPoses.remove(uuid);
+        appearances.remove(uuid); frameCalculator.clearEntity(uuid); idlePhaseTracker.remove(uuid); bodyPoses.remove(uuid);
         prevSleepHidden.remove(uuid); prevInvisHidden.remove(uuid);
     }
 
@@ -118,7 +121,7 @@ public final class SceneRenderer {
     /** Drop all recorded phases (full sync / world change). */
     public void clearIdlePhases() { idlePhaseTracker.clear(); }
     public void clearWorld() {
-        bodyPoses.clear(); clearIdlePhases(); frameCalculator.retainOnly(Set.of());
+        appearances.clear(); bodyPoses.clear(); clearIdlePhases(); frameCalculator.retainOnly(Set.of());
         prevSleepHidden.clear(); prevInvisHidden.clear(); firstFrame=true; smoothedDt=-1;
         lastMissingDefWarningTime=null;
     }
@@ -131,8 +134,9 @@ public final class SceneRenderer {
      * Render every visible halo for the current frame.
      */
     public FrameOutput renderHalos(FrameScene scene) {
+        parallelFacing = false;
         bodyPoses.clear();
-        this.scene = scene;
+        appearances.clear();
         this.draw = new GeometryCollector(scene.textures());
         meshDraw.begin(scene.visuals());
         FrameScene client = scene;
@@ -145,11 +149,12 @@ public final class SceneRenderer {
             EntitySample e = scene.entities().get(inst.getEntityUuid());
             if (e == null || !e.isAlive()) return false;
             inst.setEntitySleeping(e.isSleeping()); inst.setEntityInvisible(e.isInvisible());
-            return inst.isActive() && e.position().squaredDistanceTo(camera.getPos()) <= 65536;
+            return inst.isActive();
         }).toList();
 
         // Clean stale entries from the frame calculator's internal maps
         Set<UUID> activeUuids = visible.stream()
+            .filter(inst -> scene.entities().get(inst.getEntityUuid()).position().squaredDistanceTo(camera.getPos()) <= 65536)
             .map(HaloInstance::getEntityUuid)
             .collect(Collectors.toSet());
         frameCalculator.retainOnly(activeUuids);
@@ -177,7 +182,24 @@ public final class SceneRenderer {
 
         for (HaloInstance instance : visible) {
             try {
-                renderSingleHalo(instance, matrices, camera, tickDelta, client, dt);
+                HaloAppearance appearance = prepareAppearance(instance, client);
+                if (appearance != null) {
+                    appearances.put(instance.getEntityUuid(), appearance);
+                    EntitySample entity = scene.entities().get(instance.getEntityUuid());
+                    if (entity.position().squaredDistanceTo(camera.getPos()) <= 65536) {
+                        AnchorFrame frame = frameCalculator.calculate(instance, entity.anchor(), entity.fallbackAnchor(),
+                            appearance.definition(), camera.getPos(), dt, runtime.getConfig());
+                        var rotation = frame.worldOrientation();
+                        bodyPoses.put(instance.getEntityUuid(), new BodyPose(frame.worldPosition(),
+                            new network.azusake.halo.api.v2.AnchorRotation(rotation.x, rotation.y, rotation.z, rotation.w), frame.scale()));
+                        Vec3d crp = frame.cameraRelativePos();
+                        if (Math.abs(crp.x) <= 1000 && Math.abs(crp.y) <= 1000 && Math.abs(crp.z) <= 1000) {
+                            LightSample light = Objects.requireNonNull(scene.lightmaps().sample(frame.worldPosition()));
+                            float brightness = light.available() ? 1f : Math.max(scene.lights().brightness(frame.worldPosition()), .04f);
+                            renderAppearance(appearance, frame, matrices, camera, light, brightness);
+                        }
+                    }
+                }
             } catch (Exception e) {
                 LOG.warn("[SceneRenderer] error rendering halo for entity {}: {}", instance.getEntityUuid(), e.getMessage(), e);
             }
@@ -253,14 +275,12 @@ public final class SceneRenderer {
         }
     }
 
-    private boolean renderSingleHalo(HaloInstance instance, MatrixStack matrices,
-                                      CameraSample camera, float tickDelta, FrameScene client,
-                                      double dt) {
+    private HaloAppearance prepareAppearance(HaloInstance instance, FrameScene client) {
         // ---- resolve entity ----
         EntitySample entity = findEntityByUuid(client, instance.getEntityUuid());
         if (entity == null || !entity.isAlive()) {
             instance.deactivate();
-            return false;
+            return null;
         }
 
         // ---- resolve definition ----
@@ -272,7 +292,7 @@ public final class SceneRenderer {
                 LOG.warn("Missing halo definition: {}", instance.getDefinitionId());
                 missingDefinitionWarning.accept(instance.getDefinitionId());
             }
-            return false;
+            return null;
         }
 
         // ---- hide while sleeping (reads per-tick cache) ----
@@ -329,7 +349,7 @@ public final class SceneRenderer {
             instance.deactivate();
             prevSleepHidden.remove(uuid);
             prevInvisHidden.remove(uuid);
-            return false;
+            return null;
         }
         if (state == HaloTransitionState.STARTING && !instance.isTransitioning(startupConfig, shutdownConfig)) {
             // STARTING animation complete
@@ -340,15 +360,15 @@ public final class SceneRenderer {
                 instance.deactivate();
                 prevSleepHidden.remove(uuid);
                 prevInvisHidden.remove(uuid);
-                return false;
+                return null;
             }
             instance.setTransitionState(HaloTransitionState.NORMAL);
             state = HaloTransitionState.NORMAL;
         }
 
         // ---- Rendering gate ----
-        if (state == HaloTransitionState.NULL) return false;
-        if (state == HaloTransitionState.NORMAL && !shouldRender) return false;
+        if (state == HaloTransitionState.NULL) return null;
+        if (state == HaloTransitionState.NORMAL && !shouldRender) return null;
         // STARTING and ENDING always render (animation must play regardless of shouldRender)
 
         // Determine if transition is currently active
@@ -356,18 +376,6 @@ public final class SceneRenderer {
             && instance.getTransitionStartTime() > 0;
         double transitionElapsed = instance.getTransitionElapsed();
         boolean isStartup = state == HaloTransitionState.STARTING;
-
-        // ---- compute anchor frame ----
-        AnchorFrame frame = frameCalculator.calculate(instance, entity.anchor(), entity.fallbackAnchor(), def, camera.getPos(), dt, runtime.getConfig());
-        var rotation = frame.worldOrientation();
-        bodyPoses.put(uuid, new BodyPose(frame.worldPosition(),
-            new network.azusake.halo.api.v2.AnchorRotation(rotation.x, rotation.y, rotation.z, rotation.w), frame.scale()));
-
-        // ---- camera-relative position ----
-        Vec3d crp = frame.cameraRelativePos();
-        if (Math.abs(crp.x) > 1000 || Math.abs(crp.y) > 1000 || Math.abs(crp.z) > 1000) {
-            return false;
-        }
 
         // ---- elapsed time since halo creation ----
         final double rawAnimTime = (runtime.nowMillis() - instance.getCreatedAtTime()) / 1000.0;
@@ -391,18 +399,34 @@ public final class SceneRenderer {
         }
         idlePhaseTracker.record(instance.getEntityUuid(), animTime, transitionActive, runtime.nowMillis());
 
-        // ---- compute light at halo position for non-glowing layers ----
-        // New adapters preserve block and sky as separate lightmap inputs. Older
-        // adapters keep the original pre-multiplied scalar brightness fallback.
-        LightSample ambientLight = Objects.requireNonNull(scene.lightmaps().sample(frame.worldPosition()));
-        float brightness = ambientLight.available()
-            ? 1.0f
-            : Math.max(scene.lights().brightness(frame.worldPosition()), 0.04f);
+        Map<HaloGroup, HaloAppearance.Group> evaluated = new LinkedHashMap<>();
+        for (HaloGroup group : def.model().groups()) {
+            sampleGroup(group, instance, animTime, transitionActive, transitionElapsed, isStartup,
+                startupConfig, shutdownConfig, evaluated);
+        }
+        return new HaloAppearance(def, runtime.nowMillis(), animTime, evaluated);
+    }
 
+    /** Geometry-only entry point. Sessions have their own collector; shared client state is read-only. */
+    public FrameOutput renderPreview(PreviewFrame input, HaloAppearance appearance) {
+        parallelFacing = input.projection() == PreviewFrame.Projection.ORTHOGRAPHIC;
+        draw = new GeometryCollector(input.textures());
+        meshDraw.begin(input.visuals());
+        AnchorFrame frame = AnchorFrameCalculator.rigid(input.head(), appearance.definition(),
+            input.camera().position(), runtime.getConfig());
+        renderAppearance(appearance, frame, new MatrixStack(input.rootTransform()), input.camera(), input.light(), 1f);
+        return meshDraw.finish(draw.batches());
+    }
+
+    private void renderAppearance(HaloAppearance appearance, AnchorFrame frame, MatrixStack matrices,
+                                  CameraSample camera, LightSample ambientLight, float brightness) {
+        HaloDefinition def = appearance.definition();
+        double animTime = appearance.animationTime();
+        Vec3d crp = frame.cameraRelativePos();
         // ---- render model groups ----
         var model = def.model();
         if (model.groups().isEmpty()) {
-            return true; // empty model, nothing to draw
+            return; // empty model, nothing to draw
         }
 
         matrices.push();
@@ -437,9 +461,7 @@ public final class SceneRenderer {
             // Step 3: Recursive group rendering
             for (HaloGroup group : model.groups()) {
                 // Root groups inherit the definition root's alpha/glow
-                renderGroup(group, matrices, camera, animTime, brightness, ambientLight, defAlpha, defGlow,
-                    transitionActive, transitionElapsed, isStartup, instance,
-                    startupConfig, shutdownConfig);
+                renderGroup(group, matrices, camera, appearance, brightness, ambientLight, defAlpha, defGlow);
             }
         } finally {
             matrices.pop();
@@ -448,7 +470,6 @@ public final class SceneRenderer {
         // Clear any translucent shader tint left by the last transparent group
         draw.setShaderColor(1f, 1f, 1f, 1f);
 
-        return true;
     }
 
     // ------------------------------------------------------------------
@@ -463,127 +484,30 @@ public final class SceneRenderer {
      * is evaluated and applied as additional offset, rotation, scale, and
      * alpha (rotation in YXZ order, matching the idle animation).</p>
      */
-    private void renderGroup(HaloGroup group, MatrixStack matrices, CameraSample camera, double animTime, float brightness,
-                              LightSample ambientLight,
-                              float inheritedAlpha, float inheritedGlow,
-                              boolean transitionActive, double transitionElapsed, boolean isStartup,
-                              HaloInstance instance,
-                              StartupAnimationConfig startupConfig, StartupAnimationConfig shutdownConfig) {
+    private void renderGroup(HaloGroup group, MatrixStack matrices, CameraSample camera,
+                              HaloAppearance appearance, float brightness, LightSample ambientLight,
+                              float inheritedAlpha, float inheritedGlow) {
         matrices.push();
         try {
-            // Group local transform
             matrices.translate(group.position().x, group.position().y, group.position().z);
             applyQuaternionRotation(matrices, group.rotation());
             matrices.scale(group.scale(), group.scale(), group.scale());
-
-            // Per-group visual animation (offset + rotation + scale)
-            // Blocked during transition — all startup animations must complete first
-            if (!transitionActive) {
-                group.animation().ifPresent(anim -> {
-                    if (!anim.isEmpty()) {
-                        Vec3d animOff = anim.evaluateOffset(animTime);
-                        Quaternionf animRot = anim.evaluateRotation(animTime);
-                        float[] animScale = anim.evaluateScale(animTime);
-                        matrices.translate(animOff.x, animOff.y, animOff.z);
-                        applyQuaternionRotation(matrices, animRot);
-                        matrices.scale(animScale[0], animScale[1], animScale[2]);
-                    }
-                });
-            }
-
-            // Apply transition animation
-            float transitionAlpha = 1.0f;
-            boolean transitionDrivesAlpha = false;
-            if (transitionActive) {
-                TransitionAnimationResult anim = resolveAnimation(
-                    group, instance, isStartup, startupConfig, shutdownConfig);
-                transitionDrivesAlpha = anim != null;
-                float[] appliedOffset = new float[]{0f, 0f, 0f};
-                float[] appliedScale = new float[]{1f, 1f, 1f};
-                float[] appliedRotation = new float[]{0f, 0f, 0f};
-                float appliedAlpha = 1.0f;
-                if (anim != null) {
-                    // The transition overrides the channels it defines; a
-                    // channel without a segment is held at the frozen idle
-                    // value by withTail/withHead, so the handoff is seamless.
-                    TransitionAnimationResult.TransitionResult tr = anim.evaluate(transitionElapsed);
-                    matrices.translate(tr.offset().x, tr.offset().y, tr.offset().z);
-                    appliedOffset = new float[]{
-                        (float) tr.offset().x, (float) tr.offset().y, (float) tr.offset().z};
-                    appliedScale = tr.scale();
-                    appliedAlpha = tr.alpha();
-                    transitionAlpha = tr.alpha();
-                    // Rotation is driven by the transition queue; for a group
-                    // whose transition does not drive rotation the idle
-                    // rotation stays frozen at the trigger phase (F8).
-                    appliedRotation = anim.rotationAnimated()
-                        ? tr.rotationDegrees()
-                        : frozenIdleVisuals(group, animTime).rotationDegrees();
-                    applyQuaternionRotation(matrices, LayerAnimation.quaternionFromYxzDegrees(
-                        appliedRotation[0], appliedRotation[1], appliedRotation[2]));
-                    matrices.scale(appliedScale[0], appliedScale[1], appliedScale[2]);
-                } else {
-                    // No transition animation for this group (e.g. child groups
-                    // without transition segments): freeze its idle animation
-                    // at the trigger phase across every channel, so the
-                    // on-screen pose stays continuous across the transition.
-                    FrozenIdleVisuals frozen = frozenIdleVisuals(group, animTime);
-                    matrices.translate(frozen.offset()[0], frozen.offset()[1], frozen.offset()[2]);
-                    applyQuaternionRotation(matrices, LayerAnimation.quaternionFromYxzDegrees(
-                        frozen.rotationDegrees()[0], frozen.rotationDegrees()[1],
-                        frozen.rotationDegrees()[2]));
-                    matrices.scale(frozen.scale()[0], frozen.scale()[1], frozen.scale()[2]);
-                    appliedOffset = frozen.offset();
-                    appliedRotation = frozen.rotationDegrees();
-                    appliedScale = frozen.scale();
-                    appliedAlpha = frozen.alpha();
-                }
-                // Record the values this frame actually drew so a hide that
-                // lands mid-transition can head-patch the shutdown queues to
-                // the exact on-screen state instead of the idle animation.
-                idlePhaseTracker.recordGroupVisual(instance.getEntityUuid(), group.id().orElse(""),
-                    appliedOffset, appliedScale, appliedAlpha, appliedRotation, runtime.nowMillis());
-            }
-
-            // During transitions the transition's alpha overrides the layer's
-            // own alpha for groups with a transition segment; groups without a
-            // transition freeze their own alpha at the trigger phase.  Either
-            // way the value equals the idle animation at the frozen phase
-            // unless a real transition alpha segment fades it.  Glow keeps
-            // following the layer animation at the frozen phase.  Outside
-            // transitions the layer's own alpha drives the fade as before.
-            //
-            // Both channels inherit multiplicatively down the scene tree: each
-            // group's effective value = inherited value × its own animated value,
-            // so defining alpha on a parent group fades the whole subtree.
-            float layerAlpha = 1.0f;
-            float animatedGlow = 1.0f;
-            if (group.animation().isPresent()) {
-                var layerAnim = group.animation().get();
-                if (!layerAnim.isEmpty()) {
-                    layerAlpha = layerAnim.evaluateAlpha(animTime);
-                    animatedGlow = layerAnim.evaluateGlow(animTime);
-                }
-            }
-            float finalAlpha = transitionActive
-                ? inheritedAlpha * (transitionDrivesAlpha ? transitionAlpha : layerAlpha)
-                : inheritedAlpha * layerAlpha;
-            float effectiveGlow = inheritedGlow * animatedGlow;
+            HaloAppearance.Group visual = appearance.groups().get(group);
+            matrices.translate(visual.offset().x, visual.offset().y, visual.offset().z);
+            var q = visual.rotation();
+            applyQuaternionRotation(matrices, new Quaternionf((float) q.x(), (float) q.y(), (float) q.z(), (float) q.w()));
+            matrices.scale(visual.scaleX(), visual.scaleY(), visual.scaleZ());
+            double animTime = appearance.animationTime();
+            float finalAlpha = inheritedAlpha * visual.alpha();
+            float effectiveGlow = inheritedGlow * visual.glow();
             LightSample groupLight = group.glowing() ? LightSample.FULL_BRIGHT : ambientLight;
             draw.setLight(groupLight);
             draw.setDirectionalLighting(!group.glowing());
-
-            // Ensure the GL shader tint matches this group's effective alpha.
-            // Always set it (even to 1.0) so a translucent sibling subtree or a
-            // previously drawn group cannot bleed its tint into this group.
-            if (finalAlpha < 1.0f) {
+            if (finalAlpha < 1f) {
                 draw.enableBlend();
                 draw.defaultBlendFunc();
-                draw.setShaderColor(1f, 1f, 1f, finalAlpha);
-            } else {
-                draw.setShaderColor(1f, 1f, 1f, 1f);
             }
-
+            draw.setShaderColor(1f, 1f, 1f, finalAlpha);
             // Draw all primitives in this group
             for (HaloPrimitive primitive : group.primitives()) {
                 if (primitive instanceof BillboardPrimitive bp) {
@@ -604,13 +528,49 @@ public final class SceneRenderer {
             float childAlpha = group.inheritAlpha() ? finalAlpha : 1.0f;
             float childGlow = group.inheritGlow() ? effectiveGlow : 1.0f;
             for (HaloGroup child : group.children()) {
-                renderGroup(child, matrices, camera, animTime, brightness, ambientLight, childAlpha, childGlow,
-                    transitionActive, transitionElapsed, isStartup, instance,
-                    startupConfig, shutdownConfig);
+                renderGroup(child, matrices, camera, appearance, brightness, ambientLight, childAlpha, childGlow);
             }
         } finally {
             matrices.pop();
         }
+    }
+
+    private void sampleGroup(HaloGroup group, HaloInstance instance, double animTime,
+                             boolean transitionActive, double transitionElapsed, boolean isStartup,
+                             StartupAnimationConfig startupConfig, StartupAnimationConfig shutdownConfig,
+                             Map<HaloGroup, HaloAppearance.Group> result) {
+        var idle = group.animation().orElse(LayerAnimation.EMPTY);
+        Vec3d offset = idle.evaluateOffset(animTime);
+        Quaternionf rotation = idle.evaluateRotation(animTime);
+        float[] scale = idle.evaluateScale(animTime);
+        float alpha = idle.evaluateAlpha(animTime);
+        float glow = idle.evaluateGlow(animTime);
+        if (transitionActive) {
+            TransitionAnimationResult anim = resolveAnimation(group, instance, isStartup, startupConfig, shutdownConfig);
+            float[] degrees;
+            if (anim != null) {
+                var transition = anim.evaluate(transitionElapsed);
+                offset = transition.offset();
+                scale = transition.scale();
+                alpha = transition.alpha();
+                degrees = anim.rotationAnimated() ? transition.rotationDegrees()
+                    : frozenIdleVisuals(group, animTime).rotationDegrees();
+            } else {
+                var frozen = frozenIdleVisuals(group, animTime);
+                offset = new Vec3d(frozen.offset()[0], frozen.offset()[1], frozen.offset()[2]);
+                scale = frozen.scale();
+                alpha = frozen.alpha();
+                degrees = frozen.rotationDegrees();
+            }
+            rotation = LayerAnimation.quaternionFromYxzDegrees(degrees[0], degrees[1], degrees[2]);
+            idlePhaseTracker.recordGroupVisual(instance.getEntityUuid(), group.id().orElse(""),
+                new float[]{(float) offset.x, (float) offset.y, (float) offset.z}, scale, alpha, degrees, runtime.nowMillis());
+        }
+        result.put(group, new HaloAppearance.Group(offset,
+            new network.azusake.halo.api.v2.AnchorRotation(rotation.x, rotation.y, rotation.z, rotation.w),
+            scale[0], scale[1], scale[2], alpha, glow));
+        for (HaloGroup child : group.children()) sampleGroup(child, instance, animTime, transitionActive,
+            transitionElapsed, isStartup, startupConfig, shutdownConfig, result);
     }
 
     /**
@@ -736,7 +696,7 @@ public final class SceneRenderer {
         if (billboard.faceCamera()) {
             CameraFacing facing = computeCameraFacing(
                 matrices.peek().getPositionMatrix(), hw, hd,
-                vector(camera.up()), vector(camera.right()));
+                vector(camera.up()), vector(camera.right()), parallelFacing);
             // Identity matrix — the corners are already camera-relative world
             // coordinates, so every accumulated rotation is fully discarded.
             positionMatrix = new Matrix4f();
@@ -842,6 +802,11 @@ public final class SceneRenderer {
      */
     static CameraFacing computeCameraFacing(Matrix4f positionMatrix, float halfWidthLocal, float halfDepthLocal,
                                             Vector3f cameraUp, Vector3f cameraRight) {
+        return computeCameraFacing(positionMatrix, halfWidthLocal, halfDepthLocal, cameraUp, cameraRight, false);
+    }
+
+    private static CameraFacing computeCameraFacing(Matrix4f positionMatrix, float halfWidthLocal, float halfDepthLocal,
+                                                    Vector3f cameraUp, Vector3f cameraRight, boolean parallel) {
         Vector3f center = positionMatrix.getTranslation(new Vector3f());
 
         // World-space half extents: preserve (possibly non-uniform) scale from
@@ -855,7 +820,9 @@ public final class SceneRenderer {
         // stable direction if the quad is exactly at the camera.
         Vector3f dir;
         float lenSq = center.lengthSquared();
-        if (lenSq < 1e-12f) {
+        if (parallel) {
+            dir = new Vector3f(cameraRight).cross(cameraUp).normalize();
+        } else if (lenSq < 1e-12f) {
             dir = new Vector3f(0.0f, 0.0f, 1.0f);
         } else {
             dir = new Vector3f(center).mul(-1.0f / (float) Math.sqrt(lenSq));

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.0 — unreleased
+
+- Add optional `PreviewPort`, closeable `PreviewSession` and platform-neutral `PreviewFrame` inputs;
+  retain `ClientPort`, world frame/output constructors and anchor API v2 compatibility.
+- Share wearer appearance, transitions, animation, materials and billboard/ring/mesh dispatch across
+  world and preview draws. Preview views consume the latest world appearance without advancing it.
+- Add stateless head-relative preview bases and orthographic `face_camera`; isolate view geometry
+  from world physics, teleport flags and body-pose observations.
+- Backfill `playerPreviewHaloEnabled=true` in existing client configuration.
+- Verify frozen 2.1.2 client-port consumers against the built jar, alongside preview isolation,
+  coordinate, lifecycle, resource recovery and platform-boundary tests.
+- Keep definition schema 1.1.0, persistence, network protocols and world anchor semantics unchanged.
+
 ## 2.1.2 — 2026-09-14
 
 - Restore case-insensitive namespace-prefix matching for halo identifiers while retaining path-prefix matching.
