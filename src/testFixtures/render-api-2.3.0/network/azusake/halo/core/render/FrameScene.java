@@ -10,18 +10,11 @@ import network.azusake.halo.core.Vec3d;
 public record FrameScene(long worldToken, long timeMillis, long frameNanos,
                          CameraSample camera, Map<UUID, EntitySample> entities,
                          float[] rootTransform, LightSampler lights, TextureLookup textures,
-                         VisualResources visuals, LightmapSampler lightmaps, PrimitiveRenderMode primitiveMode) {
-    public FrameScene(long worldToken, long timeMillis, long frameNanos, CameraSample camera,
-                      Map<UUID, EntitySample> entities, float[] rootTransform, LightSampler lights,
-                      TextureLookup textures, VisualResources visuals, LightmapSampler lightmaps) {
-        this(worldToken, timeMillis, frameNanos, camera, entities, rootTransform, lights, textures,
-            visuals, lightmaps, PrimitiveRenderMode.COMPATIBILITY);
-    }
+                         VisualResources visuals, LightmapSampler lightmaps) {
     public FrameScene {
         entities = Map.copyOf(entities);
         rootTransform = rootTransform.clone();
         java.util.Objects.requireNonNull(visuals);
-        java.util.Objects.requireNonNull(primitiveMode);
         java.util.Objects.requireNonNull(lightmaps);
     }
     /** Compatibility constructor for adapters that only provide pre-multiplied scalar brightness. */

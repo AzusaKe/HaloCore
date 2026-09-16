@@ -1,4 +1,6 @@
-package network.azusake.halo.core.render;
+// Frozen collector from 4b4f7bb. Test oracle only.
+package network.azusake.halo.render;
+import network.azusake.halo.core.render.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,11 +9,8 @@ import org.joml.Vector3f;
 import network.azusake.halo.core.Identifier;
 
 /** Internal CPU geometry writer. Captures render state instead of calling a graphics API. */
-public final class GeometryCollector {
+public final class BaselineGeometryCollector {
     private final FrameScene.TextureLookup textures;
-    private final java.util.Map<Identifier, Boolean> textureResults = new java.util.HashMap<>();
-    private final List<PrimitiveDraw> primitives = new ArrayList<>();
-    private final PrimitiveRenderMode mode;
     private final List<DrawBatch> batches = new ArrayList<>();
     private final Builder builder = new Builder();
     private Identifier texture;
@@ -19,23 +18,10 @@ public final class GeometryCollector {
     private float red=1,green=1,blue=1,alpha=1;
     private LightSample light = LightSample.UNAVAILABLE;
     private boolean directionalLighting;
-    public GeometryCollector(FrameScene.TextureLookup textures) { this(textures, PrimitiveRenderMode.COMPATIBILITY); }
-    public GeometryCollector(FrameScene.TextureLookup textures, PrimitiveRenderMode mode) { this.textures=textures; this.mode=mode; }
-    public List<PrimitiveDraw> primitiveDraws() { return List.copyOf(primitives); }
-    public void geometry(PrimitiveGeometry geometry, Matrix4f transform, float brightness) {
-        geometry(geometry, transform, brightness, null);
-    }
-    public void geometry(PrimitiveGeometry geometry, Matrix4f transform, float brightness, org.joml.Matrix3f normal) {
-        DrawBatch state = new DrawBatch(geometry.topology(), List.of(), texture, textured, cull, blend,
-            depthTest, depthWrite, red, green, blue, alpha, MaterialState.LEGACY, light, directionalLighting);
-        PrimitiveDraw command = normal == null ? new PrimitiveDraw(geometry, transform.get(new float[16]), state, brightness)
-            : new PrimitiveDraw(geometry, transform.get(new float[16]), state, brightness, normal.get(new float[9]));
-        if (mode == PrimitiveRenderMode.CACHED) primitives.add(command);
-        else batches.add(command.expand());
-    }
+    public BaselineGeometryCollector(FrameScene.TextureLookup textures) { this.textures=textures; }
     public List<DrawBatch> batches() { return List.copyOf(batches); }
     public Builder getBuffer() { return builder; }
-    public boolean bindTexture(Identifier id) { texture=id; return id!=null && textureResults.computeIfAbsent(id, textures::exists); }
+    public boolean bindTexture(Identifier id) { texture=id; return id!=null && textures.exists(id); }
     public void textured(boolean value) { textured=value; }
     public void enableCull() { cull=true; }
     public void disableCull() { cull=false; }
@@ -56,13 +42,12 @@ public final class GeometryCollector {
     public final class Builder {
         private final List<DrawBatch.Vertex> vertices = new ArrayList<>();
         private DrawBatch.Topology topology;
-        private final Vector3f position = new Vector3f();
         private float x,y,z,u,v,r=1,g=1,b=1,a=1,nx=0,ny=-1,nz=0;
         public void begin(DrawBatch.Topology topology,boolean withTexture) {
             this.topology=topology; textured=withTexture; vertices.clear();
         }
         public Builder vertex(Matrix4f transform,float x,float y,float z) {
-            Vector3f p=transform.transformPosition(x,y,z,position);
+            Vector3f p=transform.transformPosition(x,y,z,new Vector3f());
             this.x=p.x;this.y=p.y;this.z=p.z;u=0;v=0;return this;
         }
         public Builder texture(float u,float v) { this.u=u;this.v=v;return this; }

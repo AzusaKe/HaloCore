@@ -22,6 +22,8 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
     private Map<Identifier,HaloDefinition> definitionInput;
     private HaloConfig config=new HaloConfig();
     private final SceneRenderer renderer;
+    private network.azusake.halo.render.PrimitiveGeometries primitives = new network.azusake.halo.render.PrimitiveGeometries();
+    public network.azusake.halo.render.PrimitiveGeometries primitiveGeometries() { return primitives; }
     private long previewEpoch;
     private long visualGeneration = Long.MIN_VALUE;
 
@@ -69,10 +71,19 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
     public long nowMillis() { return frameTime == null ? clock.getAsLong() : frameTime; }
     public HaloConfig getConfig() { return config; }
     public void setConfig(HaloConfig value) { config=value.copy(); }
-    public void definitions(DefinitionSnapshot snapshot) { definitions(snapshot.definitions()); }
+    public void definitions(DefinitionSnapshot snapshot) {
+        if (definitionInput == snapshot.definitions()) return;
+        installDefinitions(snapshot.definitions());
+        primitives = snapshot.preparedPrimitives();
+    }
     public Map<UUID,BodyPose> bodyPoses() { return renderer.bodyPoses(); }
     public void definitions(Map<Identifier,HaloDefinition> value) {
         if (definitionInput == value) return;
+        installDefinitions(value);
+        primitives = new network.azusake.halo.render.PrimitiveGeometries();
+        value.values().forEach(def -> def.model().groups().forEach(primitives::prepare));
+    }
+    private void installDefinitions(Map<Identifier,HaloDefinition> value) {
         definitionInput=value;
         renderer.clearAppearances();
         definitions=Map.copyOf(value); visuals.values().forEach(HaloInstance::invalidateDefinition);

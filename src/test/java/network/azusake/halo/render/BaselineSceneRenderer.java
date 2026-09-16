@@ -1,3 +1,4 @@
+// Frozen renderer from HaloCore 4b4f7bb, for differential tests only.
 package network.azusake.halo.render;
 
 import network.azusake.halo.data.HaloTransitionState;
@@ -46,13 +47,13 @@ import java.util.function.Consumer;
  * transform (anchor frame + layer local) determines the final world-space
  * orientation — no separate billboard-facing rotation is applied.</p>
  */
-public final class SceneRenderer {
+public final class BaselineSceneRenderer {
 
     private static final Logger LOG = Diagnostics.logger("halo");
 
     private final ClientRuntime runtime;
     private final Consumer<Identifier> missingDefinitionWarning;
-    private GeometryCollector draw;
+    private BaselineGeometryCollector draw;
     private boolean parallelFacing;
     private final MeshGeometryRenderer meshDraw = new MeshGeometryRenderer(message -> LOG.warn("[Halo mesh] {}", message));
     private final Map<UUID, HaloAppearance> appearances = new LinkedHashMap<>();
@@ -64,6 +65,15 @@ public final class SceneRenderer {
         appearances.remove(uuid); frameCalculator.clearEntity(uuid); idlePhaseTracker.remove(uuid); bodyPoses.remove(uuid);
         prevSleepHidden.remove(uuid); prevInvisHidden.remove(uuid);
     }
+
+    public static final boolean DEBUG_RENDERING = false;
+
+    /**
+     * When true, each ring segment is tinted with a distinct color so
+     * the user can visually identify individual segments and diagnose
+     * seam / overlap issues.  Set to false for normal rendering.
+     */
+    public static final boolean RING_DEBUG_SEGMENTS = false;
 
     /**
      * One missing-definition warning per client every 30 seconds, shared by all entities.
@@ -86,8 +96,8 @@ public final class SceneRenderer {
 
     private final network.azusake.halo.physics.FrameDelta frameDelta = new network.azusake.halo.physics.FrameDelta();
 
-    public SceneRenderer(ClientRuntime runtime) { this(runtime, id -> {}); }
-    public SceneRenderer(ClientRuntime runtime, Consumer<Identifier> missingDefinitionWarning) {
+    public BaselineSceneRenderer(ClientRuntime runtime) { this(runtime, id -> {}); }
+    public BaselineSceneRenderer(ClientRuntime runtime, Consumer<Identifier> missingDefinitionWarning) {
         this.runtime = runtime;
         this.missingDefinitionWarning = missingDefinitionWarning;
     }
@@ -123,7 +133,7 @@ public final class SceneRenderer {
         parallelFacing = false;
         bodyPoses.clear();
         appearances.clear();
-        this.draw = new GeometryCollector(scene.textures(), scene.primitiveMode());
+        this.draw = new BaselineGeometryCollector(scene.textures());
         meshDraw.begin(scene.visuals());
         FrameScene client = scene;
         MatrixStack matrices = new MatrixStack(scene.rootTransform());
@@ -169,7 +179,7 @@ public final class SceneRenderer {
                     }
                 }
             } catch (Exception e) {
-                LOG.warn("[SceneRenderer] error rendering halo for entity {}: {}", instance.getEntityUuid(), e.getMessage(), e);
+                LOG.warn("[BaselineSceneRenderer] error rendering halo for entity {}: {}", instance.getEntityUuid(), e.getMessage(), e);
             }
         }
 
@@ -183,7 +193,7 @@ public final class SceneRenderer {
             if (inst.isActive()) continue; // active instances handled in renderSingleHalo
 
             UUID uuid = inst.getEntityUuid();
-            EntitySample entity = SceneRenderer.findEntityByUuid(client, uuid);
+            EntitySample entity = BaselineSceneRenderer.findEntityByUuid(client, uuid);
             if (entity == null || !entity.isAlive()) {
                 removals.add(uuid);
                 continue;
@@ -220,8 +230,7 @@ public final class SceneRenderer {
             prevSleepHidden.remove(uuid);
             prevInvisHidden.remove(uuid);
         }
-        FrameOutput meshOutput = meshDraw.finish(draw.batches());
-        return new FrameOutput(meshOutput.visualGeneration(), meshOutput.legacyBatches(), meshOutput.meshes(), draw.primitiveDraws());
+        return meshDraw.finish(draw.batches());
     }
 
     // ------------------------------------------------------------------
@@ -385,11 +394,10 @@ public final class SceneRenderer {
     /** Both motion choices feed the exact same visual/geometry path. */
     public FrameOutput renderPreview(PreviewFrame input, HaloAppearance appearance, AnchorFrame frame) {
         parallelFacing = input.projection() == PreviewFrame.Projection.ORTHOGRAPHIC;
-        draw = new GeometryCollector(input.textures(), input.primitiveMode());
+        draw = new BaselineGeometryCollector(input.textures());
         meshDraw.begin(input.visuals());
         renderAppearance(appearance, frame, new MatrixStack(input.rootTransform()), input.camera(), input.light(), 1f);
-        FrameOutput meshOutput = meshDraw.finish(draw.batches());
-        return new FrameOutput(meshOutput.visualGeneration(), meshOutput.legacyBatches(), meshOutput.meshes(), draw.primitiveDraws());
+        return meshDraw.finish(draw.batches());
     }
 
     private void renderAppearance(HaloAppearance appearance, AnchorFrame frame, MatrixStack matrices,
@@ -652,27 +660,104 @@ public final class SceneRenderer {
      */
     private void renderBillboard(BillboardPrimitive billboard, MatrixStack matrices, CameraSample camera,
                                  boolean glowing, float brightness, float animatedGlow) {
-        PrimitiveGeometry geometry = runtime.primitiveGeometries().billboard(billboard);
-        if (geometry == null) return;
-        Matrix4f transform = matrices.peek().getPositionMatrix();
-        Matrix3f facingNormal = null;
-        if (billboard.faceCamera()) {
-            // Unit quad: preserve the existing facing basis, including orthographic GUI views.
-            var size = billboard.size();
-            CameraFacing facing = computeCameraFacing(transform, size.x / 2f, size.y / 2f,
-                vector(camera.up()), vector(camera.right()), parallelFacing);
-            geometry = runtime.primitiveGeometries().facingQuad();
-            Vector3f normal = new Vector3f(facing.right()).cross(facing.up()).normalize();
-            facingNormal = new Matrix3f().setColumn(1, new Vector3f(normal).negate());
-            Vector3f right = new Vector3f(facing.right()).mul(facing.halfWidth());
-            Vector3f up = new Vector3f(facing.up()).mul(facing.halfDepth());
-            transform = new Matrix4f(right.x,right.y,right.z,0, -normal.x,-normal.y,-normal.z,0,
-                up.x,up.y,up.z,0, facing.center().x,facing.center().y,facing.center().z,1);
+        float hw = billboard.size().x / 2.0f;  // half-width (X)
+        float hd = billboard.size().y / 2.0f;  // half-depth (Z) — size.y maps to Z axis
+
+        if (DEBUG_RENDERING) {
+            hw *= 5.0f;
+            hd *= 5.0f;
         }
-        draw.textured(bindTextureSafe(billboard.texture()));
-        draw.disableCull(); draw.enableBlend(); draw.enableDepthTest(); draw.depthMask(true);
-        draw.geometry(geometry, transform, glowing ? animatedGlow : brightness, facingNormal);
-        draw.enableCull(); draw.disableBlend();
+
+        // Camera-facing quads are rebuilt in camera-relative world space from
+        // the matrix's position + scale (rotation discarded), so no animation
+        // rotation can override the facing.  Other quads keep using the
+        // accumulated matrix-stack transform.
+        Matrix4f positionMatrix;
+        Vector3f surfaceNormal;
+        Vector3f c0, c1, c2, c3; // quad corners in the position-matrix space
+        if (billboard.faceCamera()) {
+            CameraFacing facing = computeCameraFacing(
+                matrices.peek().getPositionMatrix(), hw, hd,
+                vector(camera.up()), vector(camera.right()), parallelFacing);
+            // Identity matrix — the corners are already camera-relative world
+            // coordinates, so every accumulated rotation is fully discarded.
+            positionMatrix = new Matrix4f();
+            Vector3f rightHalf = new Vector3f(facing.right()).mul(facing.halfWidth());
+            Vector3f upHalf = new Vector3f(facing.up()).mul(facing.halfDepth());
+            c0 = new Vector3f(facing.center()).sub(rightHalf).sub(upHalf);
+            c1 = new Vector3f(facing.center()).add(rightHalf).sub(upHalf);
+            c2 = new Vector3f(facing.center()).add(rightHalf).add(upHalf);
+            c3 = new Vector3f(facing.center()).sub(rightHalf).add(upHalf);
+            surfaceNormal = new Vector3f(facing.right()).cross(facing.up()).normalize();
+        } else {
+            positionMatrix = matrices.peek().getPositionMatrix();
+            c0 = new Vector3f(-hw, 0.0f, -hd);
+            c1 = new Vector3f( hw, 0.0f, -hd);
+            c2 = new Vector3f( hw, 0.0f,  hd);
+            c3 = new Vector3f(-hw, 0.0f,  hd);
+            surfaceNormal = transformNormal(normalMatrix(positionMatrix), 0, -1, 0);
+        }
+
+        BaselineGeometryCollector tessellator = draw;
+        BaselineGeometryCollector.Builder builder = tessellator.getBuffer();
+        builder.normal(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z);
+
+        boolean hasTexture = bindTextureSafe(billboard.texture());
+
+        // Self-illuminating primitives are lit by the animation.glow channel;
+        // otherwise brightness follows the ambient light at the halo position.
+        float brightnessFactor = glowing ? animatedGlow : brightness;
+
+        // Billboard quads are translucent — disable face culling
+        draw.disableCull();
+
+        if (DEBUG_RENDERING) {
+            draw.disableDepthTest();
+            draw.depthMask(false);
+        } else {
+            draw.enableDepthTest();
+            draw.depthMask(true);
+        }
+
+        if (hasTexture) {
+            draw.enableBlend();
+            draw.defaultBlendFunc();
+            // Default: XZ plane at Y=0, normal = -Y (faces downward toward the
+            // entity head).
+            // Vertex winding from BELOW (-Y) is CCW → front face faces -Y:
+            // (-hw, 0, -hd)  →  (+hw, 0, -hd)  →  (+hw, 0, +hd)  →  (-hw, 0, +hd)
+            // face_camera keeps the same UV layout upright (V=0 at the +up side).
+            // Tint texture by the effective brightness factor (fullbright at 1.0)
+            draw.textured(true);
+            builder.begin(DrawBatch.Topology.QUADS, true);
+            builder.vertex(positionMatrix, c0.x, c0.y, c0.z).texture(0.0f, 1.0f).color(brightnessFactor, brightnessFactor, brightnessFactor, 1f).next();
+            builder.vertex(positionMatrix, c1.x, c1.y, c1.z).texture(1.0f, 1.0f).color(brightnessFactor, brightnessFactor, brightnessFactor, 1f).next();
+            builder.vertex(positionMatrix, c2.x, c2.y, c2.z).texture(1.0f, 0.0f).color(brightnessFactor, brightnessFactor, brightnessFactor, 1f).next();
+            builder.vertex(positionMatrix, c3.x, c3.y, c3.z).texture(0.0f, 0.0f).color(brightnessFactor, brightnessFactor, brightnessFactor, 1f).next();
+        } else {
+            draw.textured(false);
+            if (DEBUG_RENDERING) {
+                draw.disableBlend();
+            } else {
+                draw.enableBlend();
+                draw.defaultBlendFunc();
+            }
+            builder.begin(DrawBatch.Topology.QUADS, false);
+            builder.vertex(positionMatrix, c0.x, c0.y, c0.z).color(brightnessFactor, brightnessFactor, brightnessFactor, 1.0f).next();
+            builder.vertex(positionMatrix, c1.x, c1.y, c1.z).color(brightnessFactor, brightnessFactor, brightnessFactor, 1.0f).next();
+            builder.vertex(positionMatrix, c2.x, c2.y, c2.z).color(brightnessFactor, brightnessFactor, brightnessFactor, 1.0f).next();
+            builder.vertex(positionMatrix, c3.x, c3.y, c3.z).color(brightnessFactor, brightnessFactor, brightnessFactor, 1.0f).next();
+        }
+
+        tessellator.draw();
+
+        draw.enableCull();
+
+        if (DEBUG_RENDERING) {
+            draw.depthMask(true);
+            draw.enableDepthTest();
+        }
+        draw.disableBlend();
     }
 
     /**
@@ -765,22 +850,264 @@ public final class SceneRenderer {
      * sides.</p>
      */
     private void renderRing(RingPrimitive ring, MatrixStack matrices, boolean glowing, float brightness, float animatedGlow) {
-        PrimitiveGeometry outerGeometry = runtime.primitiveGeometries().ring(ring, false);
-        PrimitiveGeometry innerGeometry = runtime.primitiveGeometries().ring(ring, true);
-        if (outerGeometry == null || innerGeometry == null) return;
-        boolean outer = bindTextureSafe(ring.outerTexture());
-        boolean cull = outer && ring.innerTexture() != null;
-        draw.textured(outer); draw.enableBlend(); draw.enableDepthTest(); draw.depthMask(true);
-        if (cull) draw.enableCull(); else draw.disableCull();
-        Matrix4f transform = matrices.peek().getPositionMatrix();
-        float color = glowing ? animatedGlow : brightness;
-        draw.geometry(outerGeometry, transform, color);
-        if (outer) {
-            Identifier inner = ring.innerTexture() != null ? ring.innerTexture() : ring.outerTexture();
-            if (!bindTextureSafe(inner)) bindTextureSafe(ring.outerTexture());
+        float radius = ring.size().x;
+        float width  = ring.size().y;
+        int segments = Math.max(3, ring.segments()); // minimum 3 for a visible shape
+
+        if (DEBUG_RENDERING) {
+            radius *= 5.0f;
+            width  *= 5.0f;
         }
-        draw.geometry(innerGeometry, transform, color);
-        draw.enableCull(); draw.disableBlend();
+
+        float halfW = width / 2.0f;
+
+        // Self-illuminating primitives are lit by the animation.glow channel;
+        // otherwise brightness follows the ambient light at the halo position.
+        float brightnessFactor = glowing ? animatedGlow : brightness;
+
+        Matrix4f positionMatrix = matrices.peek().getPositionMatrix();
+        Matrix3f normalMatrix = normalMatrix(positionMatrix);
+
+        BaselineGeometryCollector tessellator = draw;
+        BaselineGeometryCollector.Builder builder = tessellator.getBuffer();
+
+        boolean hasOuterTexture = bindTextureSafe(ring.outerTexture());
+        boolean twoTextures = hasOuterTexture && ring.innerTexture() != null;
+
+        if (DEBUG_RENDERING) {
+            draw.disableDepthTest();
+            draw.depthMask(false);
+        } else {
+            draw.enableDepthTest();
+            draw.depthMask(true);
+        }
+
+        if (hasOuterTexture) {
+            draw.enableBlend();
+            draw.defaultBlendFunc();
+
+            // ---- Outer surface ----
+            // Face culling: two textures → cull back faces (outer visible
+            // only from outside); single texture → no culling (visible
+            // from both sides).
+            if (twoTextures) {
+                draw.enableCull();
+            } else {
+                draw.disableCull();
+            }
+
+            // Outer surface: CCW winding → front faces point outward.
+            // Each segment emits two triangles (6 vertices):
+            //   tri A: top₀, top₁, bottom₀
+            //   tri B: bottom₀, top₁, bottom₁
+            if (glowing) {
+                draw.textured(true);
+                builder.begin(DrawBatch.Topology.TRIANGLES, true);
+                for (int i = 0; i < segments; i++) {
+                    int next = (i + 1) % segments;
+                    float u0 = (float) i / segments;
+                    // Seam fix: last segment uses U=1.0 instead of 0.0 so
+                    // GPU interpolation doesn't stretch the entire texture.
+                    float u1 = (i == segments - 1) ? 1.0f : (float) next / segments;
+                    float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                    float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                    float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                    float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                    // Triangle A
+                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    // Triangle B
+                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                }
+                tessellator.draw();
+            } else {
+                draw.textured(true);
+                builder.begin(DrawBatch.Topology.TRIANGLES, true);
+                for (int i = 0; i < segments; i++) {
+                    int next = (i + 1) % segments;
+                    float u0 = (float) i / segments;
+                    // Seam fix: last segment uses U=1.0 instead of 0.0 so
+                    // GPU interpolation doesn't stretch the entire texture.
+                    float u1 = (i == segments - 1) ? 1.0f : (float) next / segments;
+                    float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                    float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                    float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                    float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                    // Per-segment debug colour: each segment gets a
+                    // distinct hue so the user can identify individual
+                    // segments and diagnose seam issues.
+                    float cr, cg, cb;
+                    if (RING_DEBUG_SEGMENTS) {
+                        int rgb = java.awt.Color.HSBtoRGB((float) i / segments, 0.8f, 1.0f);
+                        cr = ((rgb >> 16) & 0xFF) / 255f;
+                        cg = ((rgb >>  8) & 0xFF) / 255f;
+                        cb = ( rgb        & 0xFF) / 255f;
+                    } else {
+                        cr = cg = cb = brightness;
+                    }
+                    // Triangle A
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    // Triangle B
+                    ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                }
+                tessellator.draw();
+            }
+
+            // ---- Inner surface ----
+            Identifier innerTex = ring.innerTexture() != null ? ring.innerTexture() : ring.outerTexture();
+            boolean hasInnerTexture = bindTextureSafe(innerTex);
+            if (!hasInnerTexture) {
+                bindTextureSafe(ring.outerTexture()); // fallback
+            }
+
+            if (twoTextures) {
+                draw.enableCull();
+            }
+            // (single-texture path already has culling disabled above)
+
+            // Inner surface: CW winding → front faces point inward.
+            // Same radius as outer — face culling separates visibility,
+            // no artificial offset needed.
+            //   tri A: bottom₀, bottom₁, top₀
+            //   tri B: top₀, bottom₁, top₁
+            if (glowing) {
+                draw.textured(true);
+                builder.begin(DrawBatch.Topology.TRIANGLES, true);
+                for (int i = 0; i < segments; i++) {
+                    int next = (i + 1) % segments;
+                    float u0 = (float) i / segments;
+                    // Seam fix: last segment uses U=1.0 instead of 0.0 so
+                    // GPU interpolation doesn't stretch the entire texture.
+                    float u1 = (i == segments - 1) ? 1.0f : (float) next / segments;
+                    float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                    float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                    float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                    float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                    // Triangle A
+                    builder.vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    // Triangle B
+                    builder.vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                    builder.vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(animatedGlow, animatedGlow, animatedGlow, 1f).next();
+                }
+                tessellator.draw();
+            } else {
+                draw.textured(true);
+                builder.begin(DrawBatch.Topology.TRIANGLES, true);
+                for (int i = 0; i < segments; i++) {
+                    int next = (i + 1) % segments;
+                    float u0 = (float) i / segments;
+                    // Seam fix: last segment uses U=1.0 instead of 0.0 so
+                    // GPU interpolation doesn't stretch the entire texture.
+                    float u1 = (i == segments - 1) ? 1.0f : (float) next / segments;
+                    float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                    float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                    float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                    float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                    float cr, cg, cb;
+                    if (RING_DEBUG_SEGMENTS) {
+                        int rgb = java.awt.Color.HSBtoRGB((float) i / segments, 0.5f, 0.6f);
+                        cr = ((rgb >> 16) & 0xFF) / 255f;
+                        cg = ((rgb >>  8) & 0xFF) / 255f;
+                        cb = ( rgb        & 0xFF) / 255f;
+                    } else {
+                        cr = cg = cb = brightness;
+                    }
+                    // Triangle A
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).texture(u0, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    // Triangle B
+                    ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).texture(u0, 0.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).texture(u1, 1.0f).color(cr, cg, cb, 1f).next();
+                    ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).texture(u1, 0.0f).color(cr, cg, cb, 1f).next();
+                }
+                tessellator.draw();
+            }
+        } else {
+            // No texture fallback — solid color ring, both sides visible
+            draw.disableCull();
+            draw.textured(false);
+            if (DEBUG_RENDERING) {
+                draw.disableBlend();
+            } else {
+                draw.enableBlend();
+                draw.defaultBlendFunc();
+            }
+
+            float r, g, b;
+            r = g = b = brightnessFactor;
+
+            // Outer surface (CCW)
+            builder.begin(DrawBatch.Topology.TRIANGLES, false);
+            for (int i = 0; i < segments; i++) {
+                int next = (i + 1) % segments;
+                float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos0, sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, cos1, sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+            }
+            tessellator.draw();
+
+            // Inner surface (CW)
+            builder.begin(DrawBatch.Topology.TRIANGLES, false);
+            for (int i = 0; i < segments; i++) {
+                int next = (i + 1) % segments;
+                float cos0 = (float) Math.cos(2.0 * Math.PI * i / segments);
+                float sin0 = (float) Math.sin(2.0 * Math.PI * i / segments);
+                float cos1 = (float) Math.cos(2.0 * Math.PI * next / segments);
+                float sin1 = (float) Math.sin(2.0 * Math.PI * next / segments);
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, -halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos0, -sin0).vertex(positionMatrix, radius * cos0, halfW, radius * sin0).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, -halfW, radius * sin1).color(r, g, b, 1.0f).next();
+                ringNormal(builder, normalMatrix, -cos1, -sin1).vertex(positionMatrix, radius * cos1, halfW, radius * sin1).color(r, g, b, 1.0f).next();
+            }
+            tessellator.draw();
+        }
+
+        draw.enableCull();
+
+        if (DEBUG_RENDERING) {
+            draw.depthMask(true);
+            draw.enableDepthTest();
+        }
+        draw.disableBlend();
+    }
+
+    private static BaselineGeometryCollector.Builder ringNormal(BaselineGeometryCollector.Builder builder,
+                                                         Matrix3f matrix, float x, float z) {
+        Vector3f normal = transformNormal(matrix, x, 0, z);
+        return builder.normal(normal.x, normal.y, normal.z);
+    }
+
+    private static Matrix3f normalMatrix(Matrix4f transform) {
+        Matrix3f matrix = new Matrix3f(transform);
+        float determinant = matrix.determinant();
+        return Float.isFinite(determinant) && Math.abs(determinant) > 1.0e-8f
+            ? matrix.invert().transpose() : new Matrix3f();
+    }
+
+    private static Vector3f transformNormal(Matrix3f matrix, float x, float y, float z) {
+        Vector3f normal = matrix.transform(new Vector3f(x, y, z));
+        return normal.lengthSquared() > 1.0e-12f && Float.isFinite(normal.lengthSquared())
+            ? normal.normalize() : new Vector3f(0, -1, 0);
     }
 
     // ------------------------------------------------------------------

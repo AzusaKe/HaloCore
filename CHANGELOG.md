@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.1 — 2026-09-16
+
+- Share immutable, shape-deduplicated billboard/ring geometry between compatibility expansion and ordered cached primitive commands. Retain quad diagonals, ring seams, winding and facing/normal fallbacks.
+- Add explicit `PrimitiveRenderMode` to world/preview input and `PrimitiveDraw` output, preserving every old constructor. `FrameOutput.expandedBatches` remains a same-frame compatibility/failure fallback; OBJ mesh commands and ordering are unchanged.
+- Expose legacy texture dependencies and prepared procedural geometry from `DefinitionSnapshot`, independently of existing mesh asset dependencies. Keep preparation lazy on dedicated servers.
+- Transform shared corners once in CPU expansion; memoize texture facts only within a render invocation. Isolate invalid legacy geometry during preparation.
+- Add repaired/persisted `primitiveRenderBackend` configuration, defaulting to `compatibility`; retain unrelated/unknown configuration data.
+- Compare both representations against frozen 2.3.0 geometry at fixed input/time, and run a caller compiled against frozen frame/preview/output constructors against the new jar. No definition schema, physics, API v2, save or wire changes.
+
 ## 2.3.0 — 2026-09-15
 
 - Extend the Java 17 / loader-neutral `api.v2` with preview submission and a separate host bridge.

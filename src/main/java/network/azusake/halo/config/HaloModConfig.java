@@ -18,6 +18,11 @@ public class HaloModConfig {
 
     /** Permission level required by the {@code /halo} command tree.  Clamped to [0, 4]. */
     private int commandPermissionLevel = 2;
+    private String primitiveRenderBackend = "compatibility";
+    public String getPrimitiveRenderBackend() { return primitiveRenderBackend; }
+    public void setPrimitiveRenderBackend(String value) {
+        primitiveRenderBackend = "cached".equals(value) ? "cached" : "compatibility";
+    }
 
     /** Client-only player previews using the host's inventory entity renderer. */
     private boolean playerPreviewHaloEnabled = true;

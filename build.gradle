@@ -64,3 +64,24 @@ tasks.register('verifyExternalPreviewProvider', JavaExec) {
     mainClass = 'compat.PreviewHostConsumer'
 }
 tasks.named('check') { dependsOn 'verifyExternalPreviewProvider' }
+
+tasks.register('compileLegacyRenderApi', JavaCompile) {
+    dependsOn 'classes'
+    source = fileTree('src/testFixtures/render-api-2.3.0') { include '**/*.java' }
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/render-api-2.3.0')
+}
+tasks.register('compileLegacyRenderConsumer', JavaCompile) {
+    dependsOn 'compileLegacyRenderApi'
+    source = fileTree('src/testFixtures/render-api-consumer') { include '**/*.java' }
+    classpath = files(tasks.named('compileLegacyRenderApi').flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/render-api-consumer')
+}
+tasks.register('verifyLegacyRenderConsumer', JavaExec) {
+    group = 'verification'
+    dependsOn 'compileLegacyRenderConsumer', 'jar'
+    classpath = files(tasks.named('compileLegacyRenderConsumer').flatMap { it.destinationDirectory },
+        tasks.named('jar').flatMap { it.archiveFile }) + configurations.runtimeClasspath
+    mainClass = 'compat.LegacyRenderConsumer'
+}
+tasks.named('check') { dependsOn 'verifyLegacyRenderConsumer' }

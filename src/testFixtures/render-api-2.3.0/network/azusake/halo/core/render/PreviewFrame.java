@@ -17,13 +17,7 @@ import network.azusake.halo.api.v2.AnchorPose;
 public record PreviewFrame(UUID wearer, int runtimeId, AnchorPose head,
                            FrameScene.CameraSample camera, float[] rootTransform,
                            long timeMillis, long frameNanos, LightSample light,
-                           FrameScene.TextureLookup textures, VisualResources visuals, Projection projection, PrimitiveRenderMode primitiveMode) {
-    public PreviewFrame(UUID wearer, int runtimeId, AnchorPose head, FrameScene.CameraSample camera,
-                        float[] rootTransform, long timeMillis, long frameNanos, LightSample light,
-                        FrameScene.TextureLookup textures, VisualResources visuals, Projection projection) {
-        this(wearer, runtimeId, head, camera, rootTransform, timeMillis, frameNanos, light, textures, visuals,
-            projection, PrimitiveRenderMode.COMPATIBILITY);
-    }
+                           FrameScene.TextureLookup textures, VisualResources visuals, Projection projection) {
     public enum Projection { ORTHOGRAPHIC, PERSPECTIVE }
     public PreviewFrame(UUID wearer, int runtimeId, AnchorPose head, FrameScene.CameraSample camera,
                         float[] rootTransform, long timeMillis, long frameNanos, LightSample light,
@@ -39,7 +33,6 @@ public record PreviewFrame(UUID wearer, int runtimeId, AnchorPose head,
         Objects.requireNonNull(textures);
         Objects.requireNonNull(visuals);
         Objects.requireNonNull(projection);
-        Objects.requireNonNull(primitiveMode);
         rootTransform = Objects.requireNonNull(rootTransform).clone();
         if (rootTransform.length != 16) throw new IllegalArgumentException("Expected a 4x4 root transform");
         for (float value : rootTransform) if (!Float.isFinite(value))

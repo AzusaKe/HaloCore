@@ -15,9 +15,14 @@ public final class ModConfigCodec {
             JsonElement root=JsonParser.parseString(raw);
             if(!root.isJsonObject())return invalid();
             JsonObject document=root.getAsJsonObject();
+            JsonElement requested=document.get("primitiveRenderBackend");
+            boolean backendRepaired=requested==null || !requested.isJsonPrimitive()
+                || !requested.getAsJsonPrimitive().isString()
+                || !("compatibility".equals(requested.getAsString()) || "cached".equals(requested.getAsString()));
+            if(backendRepaired) document.addProperty("primitiveRenderBackend","compatibility");
             HaloModConfig parsed=JSON.fromJson(document,HaloModConfig.class);
             if(parsed==null)return invalid();
-            boolean changed=false;
+            boolean changed=backendRepaired;
             if(missing(document,"playerPreviewHaloPhysicsEnabled")) {
                 document.addProperty("playerPreviewHaloPhysicsEnabled",parsed.isPlayerPreviewHaloPhysicsEnabled());changed=true;
             }

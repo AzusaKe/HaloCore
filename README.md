@@ -1,4 +1,4 @@
-# HaloCore 2.3.0
+# HaloCore 2.3.1
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -20,7 +20,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | Client | `ClientPort` implemented by one `ClientRuntime` per logical client |
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
 | Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
-| Frame output | `FrameOutput` with legacy `DrawBatch` values and lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
+| Frame output | `FrameOutput` with legacy `DrawBatch` or ordered `PrimitiveDraw` values plus lightweight `MeshDraw` commands; `BodyPose` observations before visual animation |
 | Player/UI previews | Optional `PreviewPort.openPreview([PreviewOptions])` → `PreviewSession.render(PreviewFrame)` → existing `FrameOutput` |
 | Head anchors | unified `network.azusake.halo.api.v2.HaloAnchorApi` for world and preview |
 | Preview anchor providers | `api.v2.AnchorSource.submitPreview` and the neutral `PreviewAnchorHost` bridge |
@@ -48,6 +48,36 @@ one warning per 30 seconds across all entities; the first warning is immediate. 
 localized chat or other feedback. World/session resets clear the throttle, and reloading definitions
 allows rendering to resume without reattaching the halo. The existing constructors remain available
 for hosts that only need diagnostic logging. Callbacks must not mutate the runtime during rendering.
+
+## Primitive backends (since 2.3.1)
+
+`FrameScene` and `PreviewFrame` accept `PrimitiveRenderMode.COMPATIBILITY` (default for every old
+constructor) or `CACHED`. The host samples this setting once at its frame boundary for both views.
+Switching output mode is not a new simulation session and must not reset appearance or physics.
+
+`FrameOutput` contains either `legacyBatches()` or `primitiveDraws()`, never both. Preserve the
+source order and existing submission stage of these legacy primitives, followed by the established
+OBJ mesh submission policy. Blending on a `PrimitiveDraw` does not request mesh-style sorting.
+The command owns copied column-major local-to-view and normal matrices, immutable geometry,
+legacy batch state, and vertex brightness. The explicit normal transform includes singular/facing
+fallbacks and cannot always be derived from the position matrix. Use the exact legacy material,
+light, byte color conversion, alpha cutoff and depth/cull behavior of the host.
+
+`PrimitiveGeometry` carries a static indexed triangle mesh and its compatibility topology. CPU
+billboards still use four corners; indexed billboards use `(0,1,2), (2,3,0)`. Rings preserve each
+inner/outer source triangle and distinct seam UVs. Reflection does not reverse legacy winding.
+`expandedBatches(resources)` or `PrimitiveDraw.expand()` expands the completed frame without
+advancing simulation again. Never submit a cached command and its fallback together.
+
+Prepare `DefinitionSnapshot.primitiveGeometries()` and `legacyTextures()` during client loading
+or definition refresh, before rendering. The read-only mesh asset dependency API retains its old
+meaning. Geometry is shared by shape within this snapshot, while dedicated servers need not
+prepare it. Invalid geometry is diagnosed and isolated. Hosts own GPU upload, generation/format
+invalidation, upload-failure memoization, resource removal and disposal. Compatibility mode need
+not allocate any procedural GPU buffers. Resource generations do not imply animation resets.
+
+`check` runs frozen 2.3.0 world/preview/output constructor bytecode against the current core jar,
+in addition to the existing API/provider and 2.1.2 adapter checks.
 
 ## Preview anchor providers (since 2.3.0)
 

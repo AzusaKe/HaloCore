@@ -7,17 +7,11 @@ import java.util.Objects;
 import org.joml.Matrix3f;
 import org.joml.Vector3f;
 
-/** Immutable frame: one ordered legacy-primitive representation, plus existing OBJ mesh commands. */
-public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, List<MeshDraw> meshes, List<PrimitiveDraw> primitiveDraws) {
-    public FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, List<MeshDraw> meshes) {
-        this(visualGeneration, legacyBatches, meshes, List.of());
-    }
+/** Immutable output for one frame: legacy immediate batches followed by ordered mesh commands. */
+public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, List<MeshDraw> meshes) {
     public FrameOutput {
         legacyBatches = List.copyOf(legacyBatches);
         meshes = List.copyOf(meshes);
-        primitiveDraws = List.copyOf(primitiveDraws);
-        if (!legacyBatches.isEmpty() && !primitiveDraws.isEmpty())
-            throw new IllegalArgumentException("Choose one legacy primitive representation");
     }
 
     public static FrameOutput legacy(List<DrawBatch> batches) {
@@ -27,10 +21,9 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
     /** Compatibility expansion for adapters that have not implemented cached mesh submission. */
     public List<DrawBatch> expandedBatches(VisualResources resources) {
         Objects.requireNonNull(resources);
-        if (meshes.isEmpty() && primitiveDraws.isEmpty()) return legacyBatches;
-        var result = new ArrayList<DrawBatch>(legacyBatches.size() + primitiveDraws.size() + meshes.size());
+        if (meshes.isEmpty()) return legacyBatches;
+        var result = new ArrayList<DrawBatch>(legacyBatches.size() + meshes.size());
         result.addAll(legacyBatches);
-        for (PrimitiveDraw draw : primitiveDraws) result.add(draw.expand());
         for (MeshDraw draw : meshes) {
             TriangleMesh mesh = resources.meshes().get(draw.model());
             if (mesh != null) result.add(expand(mesh, draw));
