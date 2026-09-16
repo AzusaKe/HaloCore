@@ -168,8 +168,8 @@ Explicit API callers select their own `PreviewOptions`. No platform type
 or GUI identity enters core, and definition schema, storage, protocol and API v2 remain unchanged.
 
 The implementation snapshot (`render.HaloAppearance`) is internal, not an adapter API. Hosts never
-construct definition graphs, mutate `HaloInstance`, or use anchor API v2 to submit a UI-space pose.
-API v2 remains world-space only. Preview physics and third-party model capture live behind
+construct definition graphs or mutate `HaloInstance`. Submit scene-space preview heads through
+`AnchorSource.submitPreview`, never through the world-space `submit` method. Preview physics and third-party model capture live behind
 this independent capability without adding methods to older adapters' `ClientPort` implementations.
 
 ## Frame and coordinate contract
