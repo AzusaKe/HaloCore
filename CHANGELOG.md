@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add optional exact-depth-transform reuse to `MeshIndexWriter`, preserving stable source-order ties,
+  floating-point depth arithmetic, mirrored winding and all existing writer entry points. Expose a
+  writer-local preparation revision so adapters can track uploaded indices per EBO and vertex layout.
+- Compare indexed/expanded writes against the frozen 2.3.1 implementation, including translation-induced
+  rounding ties, and run a frozen 2.3.1 writer caller against the current jar.
+
 ## 2.3.1 — 2026-09-16
 
 - Share immutable, shape-deduplicated billboard/ring geometry between compatibility expansion and ordered cached primitive commands. Retain quad diagonals, ring seams, winding and facing/normal fallbacks.

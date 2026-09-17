@@ -85,3 +85,24 @@ tasks.register('verifyLegacyRenderConsumer', JavaExec) {
     mainClass = 'compat.LegacyRenderConsumer'
 }
 tasks.named('check') { dependsOn 'verifyLegacyRenderConsumer' }
+
+tasks.register('compileLegacyMeshIndex', JavaCompile) {
+    dependsOn 'classes'
+    source = fileTree('src/testFixtures/mesh-index-2.3.1') { include '**/*.java' }
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/mesh-index-2.3.1')
+}
+tasks.register('compileLegacyMeshIndexConsumer', JavaCompile) {
+    dependsOn 'compileLegacyMeshIndex'
+    source = fileTree('src/testFixtures/mesh-index-consumer') { include '**/*.java' }
+    classpath = files(tasks.named('compileLegacyMeshIndex').flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('compat/mesh-index-consumer')
+}
+tasks.register('verifyLegacyMeshIndexConsumer', JavaExec) {
+    group = 'verification'
+    dependsOn 'compileLegacyMeshIndexConsumer', 'jar'
+    classpath = files(tasks.named('compileLegacyMeshIndexConsumer').flatMap { it.destinationDirectory },
+        tasks.named('jar').flatMap { it.archiveFile }) + configurations.runtimeClasspath
+    mainClass = 'compat.LegacyMeshIndexConsumer'
+}
+tasks.named('check') { dependsOn 'verifyLegacyMeshIndexConsumer' }

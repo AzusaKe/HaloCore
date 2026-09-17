@@ -259,6 +259,13 @@ sorted by instance center. Hosts use one reusable `MeshIndexWriter` per cached m
 back-to-front triangle-center ordering and mirrored winding. The regular writer methods target the mesh's
 unique-vertex stream; `writeExpandedSourceOrder` and `writeExpanded` target a triangle-corner-expanded stream for
 host formats that derive tangents or other attributes from consecutive triangle submissions. Honor each command's depth/blend/cull flags.
+`MeshIndexWriter.prepareBackToFront(draw)` optionally prepares that same order and returns a
+writer-local revision. It reuses sorting only when all four view-depth coefficients, including
+translation, match bit-for-bit. Any recomputation changes the revision, even if the output order
+is equal. Existing write methods prepare automatically; source-order writes leave it intact.
+The revision is neither a content hash nor a persistent instance ID. A host must track the revision
+and mirrored winding actually uploaded to each vertex-layout-specific EBO separately, and publish
+that state only after a successful upload. A replacement writer/EBO starts a fresh cache lifetime.
 `ClientPort.renderFrame` exposes this path; the original `render` expands meshes for compatibility.
 Transparency sorting is not global with the host world's translucent surfaces. Geometry, emission selection,
 light samples, animation and index ordering are platform independent; interpreting block/sky samples through a

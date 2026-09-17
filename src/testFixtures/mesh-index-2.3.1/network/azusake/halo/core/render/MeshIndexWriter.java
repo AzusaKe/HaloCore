@@ -15,9 +15,6 @@ public final class MeshIndexWriter {
     private int[] order;
     private int[] scratch;
     private final int[] counts = new int[256];
-    private boolean prepared;
-    private int depthX, depthY, depthZ, depthTranslation;
-    private long sortRevision;
 
     public MeshIndexWriter(TriangleMesh mesh) {
         this.mesh = Objects.requireNonNull(mesh);
@@ -37,32 +34,6 @@ public final class MeshIndexWriter {
 
     public TriangleMesh mesh() { return mesh; }
     public int indexCount() { return mesh.triangleCount() * 3; }
-
-    /**
-     * Prepare the same stable triangle order used by {@link #write}. The returned revision is
-     * local to this writer and changes whenever the depth transform is recomputed, even if the
-     * resulting indices happen to be equal. It is not a content hash or an instance identifier.
-     * Hosts may reuse an uploaded EBO only when its revision, vertex layout and mirrored winding
-     * all match; CPU preparation alone does not mean the GPU contains that order.
-     *
-     * Translation participates in the exact key: float rounding can create depth ties after a
-     * translation. Source-order writes do not invalidate this workspace. Owner-thread use only.
-     */
-    public long prepareBackToFront(MeshDraw draw) {
-        Objects.requireNonNull(draw);
-        int x = Float.floatToRawIntBits(draw.transform(2));
-        int y = Float.floatToRawIntBits(draw.transform(6));
-        int z = Float.floatToRawIntBits(draw.transform(10));
-        int translation = Float.floatToRawIntBits(draw.transform(14));
-        if (prepared && x == depthX && y == depthY && z == depthZ && translation == depthTranslation)
-            return sortRevision;
-        int triangles = mesh.triangleCount();
-        for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
-        if (triangles > 1) sort(draw);
-        depthX = x; depthY = y; depthZ = z; depthTranslation = translation;
-        prepared = true;
-        return ++sortRevision;
-    }
 
     /** Write authored triangle order without touching the sorting workspace. */
     public void writeSourceOrder(IntBuffer destination, boolean mirrored) {
@@ -92,7 +63,9 @@ public final class MeshIndexWriter {
             writeSourceOrder(destination, draw.mirrored());
             return;
         }
-        prepareBackToFront(draw);
+        int triangles = mesh.triangleCount();
+        for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
+        if (triangles > 1) sort(draw);
         for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored(), false);
     }
 
@@ -104,7 +77,9 @@ public final class MeshIndexWriter {
             writeExpandedSourceOrder(destination, draw.mirrored());
             return;
         }
-        prepareBackToFront(draw);
+        int triangles = mesh.triangleCount();
+        for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
+        if (triangles > 1) sort(draw);
         for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored(), true);
     }
 
