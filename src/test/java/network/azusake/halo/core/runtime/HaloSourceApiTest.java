@@ -82,6 +82,21 @@ class HaloSourceApiTest {
         }
     }
 
+    @Test void repeatedSetReactivatesAnUnloadedEntityWithoutReportingACandidateChange() {
+        var source = HaloApi.registerSource("test:repeat_lifecycle", 10);
+        ServerRuntime runtime = runtime(new ArrayList<>());
+        try (var host = new HaloSourceHost(runtime, Map.of())) {
+            assertTrue(source.set(ENTITY, "test:ring"));
+            host.deactivate(ENTITY);
+            assertNull(runtime.get(ENTITY));
+
+            assertFalse(source.set(ENTITY, "test:ring"));
+            assertEquals(new Identifier("test:ring"), runtime.get(ENTITY));
+        } finally {
+            source.close();
+        }
+    }
+
     @Test void runtimeReconfigurationAndClosingWinnerImmediatelyReconcile() {
         List<String> updates = new ArrayList<>();
         var low = HaloApi.registerSource("test:configured_low", -10);

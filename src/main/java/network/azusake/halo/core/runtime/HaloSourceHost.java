@@ -66,8 +66,8 @@ public final class HaloSourceHost implements AutoCloseable {
         Identifier id = new Identifier(definition);
         Identifier old = candidates.computeIfAbsent(entity, ignored -> new LinkedHashMap<>())
             .put(source.sourceId(), id);
-        active.add(entity);
-        if (!id.equals(old)) reconcile(entity);
+        boolean reactivated = active.add(entity);
+        if (!id.equals(old) || reactivated) reconcile(entity);
         return !id.equals(old);
     }
 
