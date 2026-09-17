@@ -1,4 +1,4 @@
-# HaloCore 2.3.1
+# HaloCore 2.3.2
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.

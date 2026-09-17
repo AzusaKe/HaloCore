@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.3.2 — 2026-09-17
 
 - Add optional exact-depth-transform reuse to `MeshIndexWriter`, preserving stable source-order ties,
   floating-point depth arithmetic, mirrored winding and all existing writer entry points. Expose a
