@@ -57,6 +57,15 @@ server-authoritative ownership integrations. It returns a closeable `HaloSource`
 definitionId)` and `clear(uuid)` on the logical server thread. Source registration is process-wide,
 while candidates are isolated to the active `HaloSourceHost` and never cross server sessions.
 
+Compile external providers against `halo-core-2.4.0.jar` as `compileOnly`; do not bundle or relocate
+core classes. The installed Halo platform mod supplies them at runtime. Register once during common
+initialization, retain the handle, and re-submit authoritative equipment state after player login,
+entity restoration and every new server session. A `false` mutation result can mean no value changed;
+it never means that another source won and must not drive polling or retries. Full end-to-end examples,
+resource layout, event wiring and diagnostics are in Halo's
+[English integration guide](https://github.com/AzusaKe/Halo/blob/1.20.1-fabric/docs/en/API.md#server-ownership-source-api)
+and [Chinese integration guide](https://github.com/AzusaKe/Halo/blob/1.20.1-fabric/docs/zh/API.md#server-ownership-source-api).
+
 The host supplies configured priorities. Larger signed 32-bit values win; negative priorities are
 valid. Registration order keeps the first source at a duplicated priority, demotes the next source by
 one when that slot is free, and disables a further collision until an explicit reconfiguration. A
@@ -304,8 +313,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current development version is **2.4.0**;
-the latest release tag before this work is **v2.3.2**,
+Feature version is in `gradle.properties`; the current release is **2.4.0** with tag **v2.4.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
