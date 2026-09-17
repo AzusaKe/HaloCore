@@ -35,6 +35,14 @@ public final class LegacyClientAdapter implements ClientPort {
             throw new AssertionError("Legacy render/ownership contract changed");
         adapter.teleport(wearer); adapter.died(wearer,true); adapter.clear();
         if (!adapter.assignments().isEmpty()) throw new AssertionError("Legacy clear failed");
+        var disk=new HashMap<UUID,Identifier>();var events=new ArrayList<String>();
+        var server=new ServerRuntime(new ServerRuntime.OwnershipStore(){
+            public Identifier get(UUID u){return disk.get(u);} public void set(UUID u,Identifier d){disk.put(u,d);} public void remove(UUID u){disk.remove(u);}
+        },new ServerRuntime.Updates(){
+            public void attach(UUID u,Identifier d){events.add("attach");} public void remove(UUID u,Identifier d){events.add("remove");}
+        });
+        server.show(wearer,id);if(!id.equals(server.get(wearer))||!server.hide(wearer)||!events.equals(List.of("attach","remove")))
+            throw new AssertionError("Legacy ServerRuntime ABI/behavior changed");
         System.out.println("Core 2.1.2 ClientPort adapter linked and ran against the current core jar.");
     }
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.0 — 2026-09-17
+
+- Add loader-neutral `api.v2` ownership sources with closeable, session-isolated candidate handles.
+- Arbitrate one winning definition by host-configured signed priorities, including negative values,
+  deterministic one-step collision demotion and explicit disabling of a second collision.
+- Preserve identical-definition presentation state, existing attach/remove events, legacy wire/storage
+  shapes and every published `ServerRuntime`, `ClientPort` and anchor API entry point.
+- Compile an external ownership provider using only the public API jar and run it against the built core;
+  add lifecycle, fallback, collision, minimum-integer and frozen server-runtime caller coverage.
+
 ## 2.3.2 — 2026-09-17
 
 - Add optional exact-depth-transform reuse to `MeshIndexWriter`, preserving stable source-order ties,

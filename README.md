@@ -1,4 +1,4 @@
-# HaloCore 2.3.2
+# HaloCore 2.4.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -17,6 +17,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 | --- | --- |
 | Resources | `ResourceInput`, `DefinitionResources.reload(priority, resources)`, opaque `DefinitionSnapshot` |
 | Server ownership | `ServerRuntime`, `OwnershipStore`, `Updates` |
+| External ownership sources | `api.v2.HaloApi.registerSource` / `HaloSource`, hosted by one `HaloSourceHost` per logical server |
 | Client | `ClientPort` implemented by one `ClientRuntime` per logical client |
 | Local ownership | `LocalOwnership.TextStore`, `restoreInto(serverKey, client)` |
 | Frame input | `FrameScene`, entity/camera samples, scalar fallback plus optional block/sky light callbacks, and texture lookup |
@@ -48,6 +49,20 @@ one warning per 30 seconds across all entities; the first warning is immediate. 
 localized chat or other feedback. World/session resets clear the throttle, and reloading definitions
 allows rendering to resume without reattaching the halo. The existing constructors remain available
 for hosts that only need diagnostic logging. Callbacks must not mutate the runtime during rendering.
+
+## Server ownership sources (since 2.4.0)
+
+`HaloApi.registerSource(id, defaultPriority)` is the loader-neutral API for accessory and other
+server-authoritative ownership integrations. It returns a closeable `HaloSource`; call `set(uuid,
+definitionId)` and `clear(uuid)` on the logical server thread. Source registration is process-wide,
+while candidates are isolated to the active `HaloSourceHost` and never cross server sessions.
+
+The host supplies configured priorities. Larger signed 32-bit values win; negative priorities are
+valid. Registration order keeps the first source at a duplicated priority, demotes the next source by
+one when that slot is free, and disables a further collision until an explicit reconfiguration. A
+winner change with the same definition does not emit an update. Adapters retain the old one-definition
+wire snapshot and attach/remove events. Existing `ServerRuntime` constructors and methods remain a
+compatibility facade for older adapters.
 
 ## Primitive backends (since 2.3.1)
 
@@ -289,8 +304,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current release is **2.3.0**;
-the release tag is **v2.3.0**,
+Feature version is in `gradle.properties`; the current development version is **2.4.0**;
+the latest release tag before this work is **v2.3.2**,
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

@@ -1,11 +1,16 @@
 package compat;
 
 import external.PreviewProvider;
+import external.HaloOwnershipProvider;
 import java.util.UUID;
 import network.azusake.halo.api.v2.HaloAnchorApi;
 import network.azusake.halo.api.v2.PreviewAnchorPose;
 import network.azusake.halo.api.v2.AnchorRotation;
 import network.azusake.halo.core.runtime.PreviewAnchorHost;
+import network.azusake.halo.core.runtime.HaloSourceHost;
+import network.azusake.halo.core.runtime.ServerRuntime;
+import network.azusake.halo.core.Identifier;
+import java.util.*;
 
 /** Runs with only the two consumer outputs, the built core jar and the JDK. */
 public final class PreviewHostConsumer {
@@ -33,6 +38,18 @@ public final class PreviewHostConsumer {
             }
         }
         if(HaloAnchorApi.isPreviewRendering()) throw new AssertionError("Leaked scope");
+        var updates=new ArrayList<String>();
+        var runtime=new ServerRuntime(new ServerRuntime.OwnershipStore(){
+            public Identifier get(UUID id){return null;} public void set(UUID id,Identifier def){} public void remove(UUID id){}
+        },new ServerRuntime.Updates(){
+            public void attach(UUID id,Identifier def){updates.add("+"+def);} public void remove(UUID id,Identifier def){updates.add("-"+def);}
+        });
+        try(var provider=new HaloOwnershipProvider();var ownershipHost=new HaloSourceHost(runtime,Map.of())) {
+            if(!provider.equip(wearer,"external:ring"))throw new AssertionError("Ownership submission");
+            if(!new Identifier("external:ring").equals(runtime.get(wearer)))throw new AssertionError("Ownership resolution");
+            provider.unequip(wearer);
+            if(!updates.equals(List.of("+external:ring","-external:ring")))throw new AssertionError("Ownership updates "+updates);
+        }
         System.out.println("External preview provider compiled independently and ran against the core jar + JDK only.");
     }
 }
