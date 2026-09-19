@@ -6,6 +6,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10'
     implementation 'org.joml:joml:1.10.5'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
 }
 test { useJUnitPlatform() }
 publishing { publications { mavenJava(MavenPublication) { from components.java } } }

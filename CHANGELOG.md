@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — build compatibility
+
+- Explicitly declare the JUnit Platform launcher for Gradle 9 composite builds.
+  Production sources, Java 17 bytecode and public API remain unchanged.
+
 ## 2.4.1 — 2026-09-19
 
 - Let hosts prepare transparent mesh indices from the four depth coefficients of the exact
