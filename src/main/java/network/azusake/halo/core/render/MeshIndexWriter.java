@@ -50,15 +50,31 @@ public final class MeshIndexWriter {
      */
     public long prepareBackToFront(MeshDraw draw) {
         Objects.requireNonNull(draw);
-        int x = Float.floatToRawIntBits(draw.transform(2));
-        int y = Float.floatToRawIntBits(draw.transform(6));
-        int z = Float.floatToRawIntBits(draw.transform(10));
-        int translation = Float.floatToRawIntBits(draw.transform(14));
+        return prepareBackToFront(draw.transform(2), draw.transform(6), draw.transform(10), draw.transform(14));
+    }
+
+    /**
+     * Prepare ordering from the four depth-row coefficients of the actual local-to-view
+     * transform used by a host draw call. This is useful when a platform keeps part of the
+     * view transform outside the immutable {@link MeshDraw}. It does not allocate or modify
+     * the command and keeps platform math types out of the stable adapter API.
+     */
+    public long prepareBackToFrontTransform(float xCoefficient, float yCoefficient,
+                                            float zCoefficient, float translationCoefficient) {
+        return prepareBackToFront(xCoefficient, yCoefficient, zCoefficient, translationCoefficient);
+    }
+
+    private long prepareBackToFront(float xCoefficient, float yCoefficient,
+                                    float zCoefficient, float translationCoefficient) {
+        int x = Float.floatToRawIntBits(xCoefficient);
+        int y = Float.floatToRawIntBits(yCoefficient);
+        int z = Float.floatToRawIntBits(zCoefficient);
+        int translation = Float.floatToRawIntBits(translationCoefficient);
         if (prepared && x == depthX && y == depthY && z == depthZ && translation == depthTranslation)
             return sortRevision;
         int triangles = mesh.triangleCount();
         for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
-        if (triangles > 1) sort(draw);
+        if (triangles > 1) sort(xCoefficient, yCoefficient, zCoefficient, translationCoefficient);
         depthX = x; depthY = y; depthZ = z; depthTranslation = translation;
         prepared = true;
         return ++sortRevision;
@@ -108,6 +124,23 @@ public final class MeshIndexWriter {
         for (int triangle : order) writeTriangle(destination, triangle, draw.mirrored(), true);
     }
 
+    /** Write the ordering from the most recent successful prepare call. */
+    public void writePrepared(IntBuffer destination, boolean mirrored) {
+        requirePrepared(destination);
+        for (int triangle : order) writeTriangle(destination, triangle, mirrored, false);
+    }
+
+    /** Write the prepared ordering for a triangle-corner-expanded vertex stream. */
+    public void writeExpandedPrepared(IntBuffer destination, boolean mirrored) {
+        requirePrepared(destination);
+        for (int triangle : order) writeTriangle(destination, triangle, mirrored, true);
+    }
+
+    private void requirePrepared(IntBuffer destination) {
+        requireCapacity(destination);
+        if (!prepared) throw new IllegalStateException("Back-to-front order has not been prepared");
+    }
+
     private void requireCapacity(IntBuffer destination) {
         Objects.requireNonNull(destination);
         if (destination.remaining() < indexCount()) throw new IllegalArgumentException("Insufficient index buffer capacity");
@@ -120,14 +153,14 @@ public final class MeshIndexWriter {
         destination.put(expanded ? base + (mirrored ? 1 : 2) : mesh.index(base + (mirrored ? 1 : 2)));
     }
 
-    private void sort(MeshDraw draw) {
+    private void sort(float xCoefficient, float yCoefficient, float zCoefficient, float translationCoefficient) {
         int triangles = mesh.triangleCount();
         for (int triangle = 0; triangle < triangles; triangle++) {
             int base = triangle * 3;
-            float z = draw.transform(2) * centers[base]
-                + draw.transform(6) * centers[base + 1]
-                + draw.transform(10) * centers[base + 2]
-                + draw.transform(14);
+            float z = xCoefficient * centers[base]
+                + yCoefficient * centers[base + 1]
+                + zCoefficient * centers[base + 2]
+                + translationCoefficient;
             int bits = Float.floatToIntBits(z);
             int signedOrder = bits ^ ((bits >> 31) & 0x7fffffff);
             keys[triangle] = signedOrder ^ Integer.MIN_VALUE;

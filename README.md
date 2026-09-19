@@ -1,4 +1,4 @@
-# HaloCore 2.4.0
+# HaloCore 2.4.1
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -287,6 +287,9 @@ host formats that derive tangents or other attributes from consecutive triangle 
 writer-local revision. It reuses sorting only when all four view-depth coefficients, including
 translation, match bit-for-bit. Any recomputation changes the revision, even if the output order
 is equal. Existing write methods prepare automatically; source-order writes leave it intact.
+Hosts that apply an additional platform view matrix use `prepareBackToFrontTransform(depthX, depthY, depthZ, depthTranslation)`
+and then `writePrepared` / `writeExpandedPrepared`, so sorting and GPU submission consume the
+same composed transform without allocating a replacement command.
 The revision is neither a content hash nor a persistent instance ID. A host must track the revision
 and mirrored winding actually uploaded to each vertex-layout-specific EBO separately, and publish
 that state only after a successful upload. A replacement writer/EBO starts a fresh cache lifetime.
@@ -313,8 +316,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current release is **2.4.0** with tag **v2.4.0**;
-schema **1.1.0**.
+Feature version is in `gradle.properties`; the current source version is **2.4.1** and the latest
+published release is **2.4.0** with tag **v2.4.0**; schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.

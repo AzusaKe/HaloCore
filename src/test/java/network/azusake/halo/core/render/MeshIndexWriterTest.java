@@ -2,7 +2,10 @@ package network.azusake.halo.core.render;
 
 import java.nio.IntBuffer;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import network.azusake.halo.core.Identifier;
+import org.joml.Matrix4f;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -47,6 +50,50 @@ class MeshIndexWriterTest {
         var output = IntBuffer.allocate(6);
         writer.writeExpanded(output, draw(identity(), false), true);
         assertArrayEquals(new int[]{3,4,5,0,1,2}, output.array());
+    }
+
+    @Test void explicitHostViewTransformControlsPreparedOrderWithoutChangingTheDraw() {
+        var mesh = new TriangleMesh(new float[]{
+            -1,0,0, -2,0,0, -1,1,0,
+             4,0,0,  5,0,0,  4,1,0},
+            new float[]{0,0,1,0,0,1, 0,0,1,0,0,1}, new int[]{0,1,2,3,4,5});
+        var writer = new MeshIndexWriter(mesh);
+        MeshDraw command = draw(identity(), false);
+        assertThrows(IllegalStateException.class,
+            () -> writer.writePrepared(IntBuffer.allocate(6), false));
+
+        Matrix4f actualView = new Matrix4f().rotateY((float) (Math.PI / 2));
+        long revision = writer.prepareBackToFrontTransform(
+            actualView.m02(), actualView.m12(), actualView.m22(), actualView.m32());
+        var output = IntBuffer.allocate(6);
+        writer.writePrepared(output, false);
+        assertArrayEquals(new int[]{3,4,5,0,1,2}, output.array());
+        assertEquals(revision, writer.prepareBackToFrontTransform(
+            actualView.m02(), actualView.m12(), actualView.m22(), actualView.m32()));
+        assertArrayEquals(identity(), command.localToView());
+
+        output.clear();
+        writer.writeExpandedPrepared(output, true);
+        assertArrayEquals(new int[]{3,5,4,0,2,1}, output.array());
+    }
+
+    @Test void compatibilityExpansionUsesOuterViewForSortingButNotVertexTransformation() {
+        var mesh = new TriangleMesh(new float[]{
+            -1,0,0, -2,0,0, -1,1,0,
+             4,0,0,  5,0,0,  4,1,0},
+            new float[]{0,0,1,0,0,1, 0,0,1,0,0,1}, new int[]{0,1,2,3,4,5});
+        MeshDraw command = draw(identity(), false);
+        command = new MeshDraw(command.model(), command.texture(), command.localToView(), true, true, true, false,
+            1, 1, 1, 1, false, command.material());
+        var frame = new FrameOutput(1, List.of(), List.of(command));
+        var resources = new VisualResources(1, Map.of(ID, mesh), Map.of());
+
+        var sourceOrder = frame.expandedBatches(resources).get(0).vertices();
+        Matrix4f outer = new Matrix4f().rotateY((float) (Math.PI / 2));
+        var actualOrder = frame.expandedBatches(resources,
+            outer.m02(), outer.m12(), outer.m22(), outer.m32()).get(0).vertices();
+        assertEquals(-1, sourceOrder.get(0).x());
+        assertEquals(4, actualOrder.get(0).x());
     }
 
     @Test void stableDepthSortMatchesFarToNearAndReusesWriter() {

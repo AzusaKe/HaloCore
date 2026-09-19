@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.1 — 2026-09-19
+
+- Let hosts prepare transparent mesh indices from the four depth coefficients of the exact
+  local-to-view transform used for GPU submission, without allocating or mutating `MeshDraw`.
+- Expose prepared unique-vertex and expanded-corner writes while preserving every existing writer
+  entry point, stable ties, mirrored winding and writer-local revision reuse.
+- Let compatibility expansion accept an outer view-depth row so cache-failure rendering uses the
+  same ordering. Keep JOML and platform types out of public adapter signatures and verify frozen
+  2.3.1 writer and 2.3.0 frame callers against the new jar.
+
 ## 2.4.0 — 2026-09-17
 
 - Add loader-neutral `api.v2` ownership sources with closeable, session-isolated candidate handles.

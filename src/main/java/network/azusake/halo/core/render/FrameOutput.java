@@ -26,6 +26,17 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
 
     /** Compatibility expansion for adapters that have not implemented cached mesh submission. */
     public List<DrawBatch> expandedBatches(VisualResources resources) {
+        return expandedBatches(resources, 0, 0, 1, 0);
+    }
+
+    /**
+     * Compatibility expansion for a host whose GPU submission applies an additional view matrix.
+     * The outer transform affects transparent index order only; expanded vertex coordinates remain
+     * in the command's space because the host will still apply that matrix while drawing.
+     */
+    public List<DrawBatch> expandedBatches(VisualResources resources, float outerDepthX,
+                                           float outerDepthY, float outerDepthZ,
+                                           float outerDepthTranslation) {
         Objects.requireNonNull(resources);
         if (meshes.isEmpty() && primitiveDraws.isEmpty()) return legacyBatches;
         var result = new ArrayList<DrawBatch>(legacyBatches.size() + primitiveDraws.size() + meshes.size());
@@ -33,12 +44,15 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
         for (PrimitiveDraw draw : primitiveDraws) result.add(draw.expand());
         for (MeshDraw draw : meshes) {
             TriangleMesh mesh = resources.meshes().get(draw.model());
-            if (mesh != null) result.add(expand(mesh, draw));
+            if (mesh != null) result.add(expand(mesh, draw, outerDepthX, outerDepthY,
+                outerDepthZ, outerDepthTranslation));
         }
         return List.copyOf(result);
     }
 
-    private static DrawBatch expand(TriangleMesh mesh, MeshDraw draw) {
+    private static DrawBatch expand(TriangleMesh mesh, MeshDraw draw, float outerDepthX,
+                                    float outerDepthY, float outerDepthZ,
+                                    float outerDepthTranslation) {
         DrawBatch.Vertex[] transformed = new DrawBatch.Vertex[mesh.vertexCount()];
         Matrix3f normalMatrix = normalMatrix(draw.localToView());
         for (int vertex = 0; vertex < transformed.length; vertex++) {
@@ -53,7 +67,18 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
         }
         var writer = new MeshIndexWriter(mesh);
         IntBuffer indices = IntBuffer.allocate(writer.indexCount());
-        writer.write(indices, draw, draw.blend());
+        if (draw.blend()) {
+            writer.prepareBackToFrontTransform(
+                outerDepthX * draw.transform(0) + outerDepthY * draw.transform(1)
+                    + outerDepthZ * draw.transform(2) + outerDepthTranslation * draw.transform(3),
+                outerDepthX * draw.transform(4) + outerDepthY * draw.transform(5)
+                    + outerDepthZ * draw.transform(6) + outerDepthTranslation * draw.transform(7),
+                outerDepthX * draw.transform(8) + outerDepthY * draw.transform(9)
+                    + outerDepthZ * draw.transform(10) + outerDepthTranslation * draw.transform(11),
+                outerDepthX * draw.transform(12) + outerDepthY * draw.transform(13)
+                    + outerDepthZ * draw.transform(14) + outerDepthTranslation * draw.transform(15));
+            writer.writePrepared(indices, draw.mirrored());
+        } else writer.write(indices, draw, draw.blend());
         indices.flip();
         var vertices = new ArrayList<DrawBatch.Vertex>(indices.remaining());
         while (indices.hasRemaining()) vertices.add(transformed[indices.get()]);
