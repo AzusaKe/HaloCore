@@ -1,4 +1,4 @@
-# HaloCore 2.4.1
+# HaloCore 2.4.2
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -257,6 +257,28 @@ this independent capability without adding methods to older adapters' `ClientPor
 
 ## Mesh adapter contract (2.1.0)
 
+### Full-view transparency correction (2.4.2)
+
+Adapters can opt into `MeshIndexWriter.prepareBackToFrontView(localToView, perspective)`.
+Pass the full column-major affine matrix used for GPU submission, including any outer host
+view transform, but excluding projection. Use `true` for perspective and `false` for orthographic
+views. Consume the result with `writePrepared` / `writeExpandedPrepared`; calling an older
+prepare/write method selects the older center-depth policy again. Cache keys include all 16
+coefficients and projection kind, so lateral camera movement invalidates uploaded indices too.
+Source-order writes leave either prepared policy intact. Old entry points retain their behavior.
+
+The correction clips projected triangle overlaps and compares depth across the overlap
+(reciprocal depth in perspective), then uses stable topological ordering. It changes indices only;
+UVs, normals, materials, culling, mirroring, alpha and depth-write state are preserved.
+`FrameOutput.expandedBatches(resources, outerView, perspective)` uses the same policy for CPU
+fallback, leaving returned vertex positions in command space. Existing overloads remain available.
+
+This is a bounded correction, not a general order-independent renderer: self-intersecting faces,
+cyclic visibility and separate mesh/world translucent draws are not solved by this change.
+Triangles crossing the eye plane retain center-based placement. A sweep limits candidate pairs
+to 262,144 per preparation; budget exhaustion or a cycle keeps the complete center order.
+Workspace is allocated lazily per writer and reused; unchanged views reuse the prepared revision.
+
 `DefinitionSnapshot.assets()` exposes the deduplicated model and texture IDs required by mesh primitives.
 `VisualAssetLoader` accepts a host `Source` for OBJ text and decoded texture metadata; create a new loader
 for each resource reload. It caches successes and failures by resource ID, reports each failed read once,
@@ -316,8 +338,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current source version is **2.4.1** and the latest
-published release is **2.4.0** with tag **v2.4.0**; schema **1.1.0**.
+Feature version is in `gradle.properties`; the current release is **2.4.2** with tag **v2.4.2**;
+schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
 The first extraction was released as **1.3.0**; published version tags remain immutable.

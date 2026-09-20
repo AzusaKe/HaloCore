@@ -50,9 +50,30 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
         return List.copyOf(result);
     }
 
+    /** Full-view counterpart for adapters using overlap-aware transparent index ordering. */
+    public List<DrawBatch> expandedBatches(VisualResources resources, float[] outerView, boolean perspective) {
+        Objects.requireNonNull(resources);
+        var outer = new org.joml.Matrix4f().set(outerView);
+        var result = new ArrayList<DrawBatch>(legacyBatches);
+        for (PrimitiveDraw draw : primitiveDraws) result.add(draw.expand());
+        for (MeshDraw draw : meshes) {
+            TriangleMesh mesh = resources.meshes().get(draw.model());
+            if (mesh == null) continue;
+            float[] actualView = new org.joml.Matrix4f(outer).mul(new org.joml.Matrix4f().set(draw.localToView())).get(new float[16]);
+            result.add(expand(mesh, draw, 0, 0, 1, 0, actualView, perspective));
+        }
+        return List.copyOf(result);
+    }
+
     private static DrawBatch expand(TriangleMesh mesh, MeshDraw draw, float outerDepthX,
                                     float outerDepthY, float outerDepthZ,
                                     float outerDepthTranslation) {
+        return expand(mesh, draw, outerDepthX, outerDepthY, outerDepthZ, outerDepthTranslation, null, false);
+    }
+
+    private static DrawBatch expand(TriangleMesh mesh, MeshDraw draw, float outerDepthX,
+                                    float outerDepthY, float outerDepthZ, float outerDepthTranslation,
+                                    float[] actualView, boolean perspective) {
         DrawBatch.Vertex[] transformed = new DrawBatch.Vertex[mesh.vertexCount()];
         Matrix3f normalMatrix = normalMatrix(draw.localToView());
         for (int vertex = 0; vertex < transformed.length; vertex++) {
@@ -68,7 +89,8 @@ public record FrameOutput(long visualGeneration, List<DrawBatch> legacyBatches, 
         var writer = new MeshIndexWriter(mesh);
         IntBuffer indices = IntBuffer.allocate(writer.indexCount());
         if (draw.blend()) {
-            writer.prepareBackToFrontTransform(
+            if (actualView != null) writer.prepareBackToFrontView(actualView, perspective);
+            else writer.prepareBackToFrontTransform(
                 outerDepthX * draw.transform(0) + outerDepthY * draw.transform(1)
                     + outerDepthZ * draw.transform(2) + outerDepthTranslation * draw.transform(3),
                 outerDepthX * draw.transform(4) + outerDepthY * draw.transform(5)

@@ -18,6 +18,9 @@ public final class MeshIndexWriter {
     private boolean prepared;
     private int depthX, depthY, depthZ, depthTranslation;
     private long sortRevision;
+    private ProjectedTriangleOrder projectedOrder;
+    private final float[] preparedView = new float[16];
+    private boolean viewPrepared, preparedPerspective;
 
     public MeshIndexWriter(TriangleMesh mesh) {
         this.mesh = Objects.requireNonNull(mesh);
@@ -64,14 +67,42 @@ public final class MeshIndexWriter {
         return prepareBackToFront(xCoefficient, yCoefficient, zCoefficient, translationCoefficient);
     }
 
+    /**
+     * Prepare transparent order using the complete affine local-to-view matrix (column-major,
+     * no projection). Perspective views use rays from view origin; orthographic views use -Z.
+     * Overlapping nonintersecting triangles are constrained by their actual per-pixel depths,
+     * with center-depth order as the stable fallback. Crossing the eye plane, cyclic visibility
+     * and excessive overlap retain the center approximation. No geometry is split or discarded.
+     * All matrix coefficients and the projection kind participate in revision reuse.
+     */
+    public long prepareBackToFrontView(float[] localToView, boolean perspective) {
+        Objects.requireNonNull(localToView);
+        if (localToView.length != 16) throw new IllegalArgumentException("Expected a 4x4 view matrix");
+        for (float value : localToView) if (!Float.isFinite(value))
+            throw new IllegalArgumentException("Non-finite view matrix");
+        if (localToView[3] != 0 || localToView[7] != 0 || localToView[11] != 0 || localToView[15] != 1)
+            throw new IllegalArgumentException("Expected an affine view matrix without projection");
+        if (viewPrepared && perspective == preparedPerspective && Arrays.equals(preparedView, localToView))
+            return sortRevision;
+        // A refinement can differ even when the depth row is unchanged (e.g. lateral movement).
+        prepared = false;
+        prepareBackToFront(localToView[2], localToView[6], localToView[10], localToView[14]);
+        if (projectedOrder == null) projectedOrder = new ProjectedTriangleOrder(mesh);
+        projectedOrder.refine(order, localToView, perspective);
+        System.arraycopy(localToView, 0, preparedView, 0, 16);
+        viewPrepared = true; preparedPerspective = perspective;
+        return sortRevision;
+    }
+
     private long prepareBackToFront(float xCoefficient, float yCoefficient,
                                     float zCoefficient, float translationCoefficient) {
         int x = Float.floatToRawIntBits(xCoefficient);
         int y = Float.floatToRawIntBits(yCoefficient);
         int z = Float.floatToRawIntBits(zCoefficient);
         int translation = Float.floatToRawIntBits(translationCoefficient);
-        if (prepared && x == depthX && y == depthY && z == depthZ && translation == depthTranslation)
+        if (prepared && !viewPrepared && x == depthX && y == depthY && z == depthZ && translation == depthTranslation)
             return sortRevision;
+        viewPrepared = false;
         int triangles = mesh.triangleCount();
         for (int triangle = 0; triangle < triangles; triangle++) order[triangle] = triangle;
         if (triangles > 1) sort(xCoefficient, yCoefficient, zCoefficient, translationCoefficient);

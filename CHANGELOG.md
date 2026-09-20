@@ -1,9 +1,19 @@
 # Changelog
 
-## Unreleased — build compatibility
+## 2.4.2 — 2026-09-20
+
+- Add full-view transparent triangle ordering, constraining overlapping triangles by their
+  actual projected depths instead of relying only on triangle centers. Covers perspective
+  world views and orthographic previews without changing geometry, UVs, normals or materials.
+- Add `MeshIndexWriter.prepareBackToFrontView(float[], boolean)` and a full-view
+  `FrameOutput.expandedBatches` overload. Existing APIs and their ordering remain unchanged;
+  adapters must opt into the new entry points, passing the complete GPU model-view matrix.
+- Keep bounded work and the previous center approximation for cyclic visibility, eye-plane
+  crossings or excessive overlap; this is not order-independent transparency or mesh splitting.
+- Reproduce the bundled ring's ordering defect with independent ray/triangle visibility tests.
 
 - Explicitly declare the JUnit Platform launcher for Gradle 9 composite builds.
-  Production sources, Java 17 bytecode and public API remain unchanged.
+  Java 17 bytecode and existing public API signatures remain compatible.
 
 ## 2.4.1 — 2026-09-19
 
