@@ -12,6 +12,8 @@ public final class GeometryCollector {
     private final java.util.Map<Identifier, Boolean> textureResults = new java.util.HashMap<>();
     private final List<PrimitiveDraw> primitives = new ArrayList<>();
     private final PrimitiveRenderMode mode;
+    private java.util.function.Consumer<PrimitiveDraw> sink;
+    public void sink(java.util.function.Consumer<PrimitiveDraw> value) { sink=value; }
     private final List<DrawBatch> batches = new ArrayList<>();
     private final Builder builder = new Builder();
     private Identifier texture;
@@ -28,9 +30,11 @@ public final class GeometryCollector {
     public void geometry(PrimitiveGeometry geometry, Matrix4f transform, float brightness, org.joml.Matrix3f normal) {
         DrawBatch state = new DrawBatch(geometry.topology(), List.of(), texture, textured, cull, blend,
             depthTest, depthWrite, red, green, blue, alpha, MaterialState.LEGACY, light, directionalLighting);
+        if (sink != null && normal == null) normal=RetainedNormalMatrix.from(transform);
         PrimitiveDraw command = normal == null ? new PrimitiveDraw(geometry, transform.get(new float[16]), state, brightness)
             : new PrimitiveDraw(geometry, transform.get(new float[16]), state, brightness, normal.get(new float[9]));
-        if (mode == PrimitiveRenderMode.CACHED) primitives.add(command);
+        if (sink != null) sink.accept(command);
+        else if (mode == PrimitiveRenderMode.CACHED) primitives.add(command);
         else batches.add(command.expand());
     }
     public List<DrawBatch> batches() { return List.copyOf(batches); }

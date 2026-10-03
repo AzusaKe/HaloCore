@@ -11,7 +11,7 @@ import network.azusake.halo.render.IdlePhaseTracker;
 import network.azusake.halo.render.SceneRenderer;
 
 /** One logical client. Authority replicas outlive entity/render instances. Never shared with a server. */
-public final class ClientRuntime implements ClientPort, PreviewPort {
+public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
     private final Map<UUID,Identifier> assignments = new LinkedHashMap<>();
     private final Map<UUID,HaloInstance> visuals = new LinkedHashMap<>();
     private final Map<UUID,Integer> entityIds = new HashMap<>();
@@ -24,6 +24,7 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
     private final SceneRenderer renderer;
     private network.azusake.halo.render.PrimitiveGeometries primitives = new network.azusake.halo.render.PrimitiveGeometries();
     public network.azusake.halo.render.PrimitiveGeometries primitiveGeometries() { return primitives; }
+    private long definitionRevision;
     private long previewEpoch;
     private long visualGeneration = Long.MIN_VALUE;
 
@@ -85,6 +86,7 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
     }
     private void installDefinitions(Map<Identifier,HaloDefinition> value) {
         definitionInput=value;
+        definitionRevision++;
         renderer.clearAppearances();
         definitions=Map.copyOf(value); visuals.values().forEach(HaloInstance::invalidateDefinition);
     }
@@ -127,7 +129,11 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
         return Map.copyOf(result);
     }
     public SceneRenderer renderer() { return renderer; }
-    private FrameOutput produceFrame(FrameScene scene) {
+    private FrameOutput produceFrame(FrameScene scene) { return produceFrame(scene, renderer::renderHalos); }
+    @Override public SceneFrame renderScene(FrameScene scene) {
+        return produceFrame(scene, input -> renderer.renderScene(input, definitionRevision));
+    }
+    private <T> T produceFrame(FrameScene scene, java.util.function.Function<FrameScene,T> render) {
         frameTime=scene.timeMillis();
         try {
             if(worldToken!=scene.worldToken()) {
@@ -146,7 +152,7 @@ public final class ClientRuntime implements ClientPort, PreviewPort {
                 if(scene.entities().containsKey(uuid) && scene.entities().get(uuid).alive()) visuals.computeIfAbsent(uuid,k->new HaloInstance(k,id,this::nowMillis));
             });
             visualGeneration=scene.visuals().generation();
-            return renderer.renderHalos(scene);
+            return render.apply(scene);
         } finally { frameTime=null; }
     }
     @Override public FrameOutput renderFrame(FrameScene scene) { return produceFrame(scene); }

@@ -54,6 +54,43 @@ public final class SceneRenderer {
     private final Consumer<Identifier> missingDefinitionWarning;
     private GeometryCollector draw;
     private boolean parallelFacing;
+    private List<SceneDraw> retained;
+    private long retainedRevision;
+    private FrameScene retainedInput;
+    private UUID retainedWearer;
+    private Vec3d retainedOrigin;
+    private Identifier retainedDefinition;
+    private String retainedPath;
+    private int retainedPrimitive, retainedPart;
+    private SceneDraw.Kind retainedKind;
+
+    public SceneFrame renderScene(FrameScene input, long definitionRevision) {
+        retained = new ArrayList<>(); retainedInput = input; retainedRevision = definitionRevision;
+        try {
+            renderHalos(input);
+            return new SceneFrame(input.worldToken(),input.visuals().generation(),retained);
+        } finally {
+            retained=null; retainedInput=null; meshDraw.sink(null);
+        }
+    }
+    private SceneDraw.Key retainedKey() {
+        return new SceneDraw.Key(retainedWearer,retainedInput.entities().get(retainedWearer).runtimeId(),
+            retainedDefinition,retainedRevision,retainedPath,retainedPrimitive,retainedPart++);
+    }
+    private void retainPrimitive(PrimitiveDraw command) {
+        var state=command.state();
+        retained.add(new SceneDraw(retainedKey(),retainedKind,command.geometry().mesh(),retainedOrigin,
+            command.localToView(),command.normalToView(),state.texture(),state.textured(),state.cull(),
+            !state.directionalLighting(),command.brightness(),state.alpha(),state.material()));
+    }
+    private void retainMesh(MeshDraw command) {
+        var transform=new Matrix4f().set(command.localToView());
+        var normal=RetainedNormalMatrix.from(transform);
+        retained.add(new SceneDraw(retainedKey(),SceneDraw.Kind.MESH,
+            retainedInput.visuals().meshes().get(command.model()),retainedOrigin,command.localToView(),
+            normal.get(new float[9]),command.texture(),true,command.cull(),!command.directionalLighting(),
+            command.red(),command.alpha(),command.material()));
+    }
     private final MeshGeometryRenderer meshDraw = new MeshGeometryRenderer(message -> LOG.warn("[Halo mesh] {}", message));
     private final Map<UUID, HaloAppearance> appearances = new LinkedHashMap<>();
     public HaloAppearance appearance(UUID wearer) { return appearances.get(wearer); }
@@ -125,8 +162,10 @@ public final class SceneRenderer {
         appearances.clear();
         this.draw = new GeometryCollector(scene.textures(), scene.primitiveMode());
         meshDraw.begin(scene.visuals());
+        meshDraw.sink(retained == null ? null : this::retainMesh);
+        if (retained != null) draw.sink(this::retainPrimitive);
         FrameScene client = scene;
-        MatrixStack matrices = new MatrixStack(scene.rootTransform());
+        MatrixStack matrices = new MatrixStack(retained == null ? scene.rootTransform() : new Matrix4f().get(new float[16]));
         CameraSample camera = scene.camera();
         float tickDelta = 0;
         idlePhaseTracker.prune(runtime.nowMillis());
@@ -164,7 +203,11 @@ public final class SceneRenderer {
                         if (Math.abs(crp.x) <= 1000 && Math.abs(crp.y) <= 1000 && Math.abs(crp.z) <= 1000) {
                             LightSample light = Objects.requireNonNull(scene.lightmaps().sample(frame.worldPosition()));
                             float brightness = light.available() ? 1f : Math.max(scene.lights().brightness(frame.worldPosition()), .04f);
-                            renderAppearance(appearance, frame, matrices, camera, light, brightness);
+                            if (retained != null) {
+                                retainedWearer=instance.getEntityUuid(); retainedDefinition=instance.getDefinitionId();
+                                retainedOrigin=frame.worldPosition();
+                            }
+                            renderAppearance(appearance, frame, matrices, camera, light, retained == null ? brightness : 1f);
                         }
                     }
                 }
@@ -406,7 +449,7 @@ public final class SceneRenderer {
         matrices.push();
         try {
             // Step 1: Anchor frame → world
-            matrices.translate(crp.x, crp.y, crp.z);
+            if (retained == null) matrices.translate(crp.x, crp.y, crp.z);
             applyQuaternionRotation(matrices, frame.worldOrientation());
             matrices.scale(frame.scale(), frame.scale(), frame.scale());
 
@@ -433,7 +476,9 @@ public final class SceneRenderer {
             }
 
             // Step 3: Recursive group rendering
-            for (HaloGroup group : model.groups()) {
+            for (int root=0;root<model.groups().size();root++) {
+                HaloGroup group=model.groups().get(root);
+                if (retained != null) retainedPath=Integer.toString(root);
                 // Root groups inherit the definition root's alpha/glow
                 renderGroup(group, matrices, camera, appearance, brightness, ambientLight, defAlpha, defGlow);
             }
@@ -483,7 +528,12 @@ public final class SceneRenderer {
             }
             draw.setShaderColor(1f, 1f, 1f, finalAlpha);
             // Draw all primitives in this group
-            for (HaloPrimitive primitive : group.primitives()) {
+            for (int index=0;index<group.primitives().size();index++) {
+                HaloPrimitive primitive=group.primitives().get(index);
+                if (retained != null) {
+                    retainedPrimitive=index; retainedPart=0;
+                    retainedKind=primitive instanceof RingPrimitive ? SceneDraw.Kind.RING : SceneDraw.Kind.BILLBOARD;
+                }
                 if (primitive instanceof BillboardPrimitive bp) {
                     renderBillboard(bp, matrices, camera, group.glowing(), brightness, effectiveGlow);
                 } else if (primitive instanceof RingPrimitive rp) {
@@ -501,9 +551,12 @@ public final class SceneRenderer {
             // subtree starts fresh from 1.0 instead of inheriting.
             float childAlpha = group.inheritAlpha() ? finalAlpha : 1.0f;
             float childGlow = group.inheritGlow() ? effectiveGlow : 1.0f;
-            for (HaloGroup child : group.children()) {
-                renderGroup(child, matrices, camera, appearance, brightness, ambientLight, childAlpha, childGlow);
+            String parentPath=retainedPath;
+            for (int childIndex=0;childIndex<group.children().size();childIndex++) {
+                if (retained != null) retainedPath=parentPath+"/"+childIndex;
+                renderGroup(group.children().get(childIndex), matrices, camera, appearance, brightness, ambientLight, childAlpha, childGlow);
             }
+            retainedPath=parentPath;
         } finally {
             matrices.pop();
         }
@@ -659,7 +712,14 @@ public final class SceneRenderer {
         if (billboard.faceCamera()) {
             // Unit quad: preserve the existing facing basis, including orthographic GUI views.
             var size = billboard.size();
-            CameraFacing facing = computeCameraFacing(transform, size.x / 2f, size.y / 2f,
+            Matrix4f facingTransform=transform;
+            if (retained != null) {
+                facingTransform=new Matrix4f(transform);
+                facingTransform.m30((float)(retainedOrigin.x-camera.position().x+transform.m30()));
+                facingTransform.m31((float)(retainedOrigin.y-camera.position().y+transform.m31()));
+                facingTransform.m32((float)(retainedOrigin.z-camera.position().z+transform.m32()));
+            }
+            CameraFacing facing = computeCameraFacing(facingTransform, size.x / 2f, size.y / 2f,
                 vector(camera.up()), vector(camera.right()), parallelFacing);
             geometry = runtime.primitiveGeometries().facingQuad();
             Vector3f normal = new Vector3f(facing.right()).cross(facing.up()).normalize();
@@ -667,7 +727,8 @@ public final class SceneRenderer {
             Vector3f right = new Vector3f(facing.right()).mul(facing.halfWidth());
             Vector3f up = new Vector3f(facing.up()).mul(facing.halfDepth());
             transform = new Matrix4f(right.x,right.y,right.z,0, -normal.x,-normal.y,-normal.z,0,
-                up.x,up.y,up.z,0, facing.center().x,facing.center().y,facing.center().z,1);
+                up.x,up.y,up.z,0, retained == null ? facing.center().x : transform.m30(),
+                retained == null ? facing.center().y : transform.m31(),retained == null ? facing.center().z : transform.m32(),1);
         }
         draw.textured(bindTextureSafe(billboard.texture()));
         draw.disableCull(); draw.enableBlend(); draw.enableDepthTest(); draw.depthMask(true);

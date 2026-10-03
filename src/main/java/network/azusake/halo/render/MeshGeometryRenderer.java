@@ -25,6 +25,8 @@ public final class MeshGeometryRenderer {
     private final List<MeshDraw> opaque = new ArrayList<>();
     private final List<Pending> translucent = new ArrayList<>();
     private VisualResources resources = VisualResources.EMPTY;
+    private Consumer<MeshDraw> sink;
+    public void sink(Consumer<MeshDraw> value) { sink=value; }
     private long warningGeneration = Long.MIN_VALUE;
 
     public MeshGeometryRenderer(Consumer<String> warning) { this.warning = warning; }
@@ -74,7 +76,8 @@ public final class MeshGeometryRenderer {
                 !primitive.material().doubleSided(), blend, true, !blend,
                 brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask), light,
                 directionalLighting);
-            if (blend) {
+            if (sink != null) sink.accept(draw);
+            else if (blend) {
                 Vec3d center = mesh.center();
                 float depth = matrix[2] * (float) center.x + matrix[6] * (float) center.y
                     + matrix[10] * (float) center.z + matrix[14];

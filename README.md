@@ -1,4 +1,4 @@
-# HaloCore 2.4.2
+# HaloCore 2.5.0 development
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -102,6 +102,22 @@ not allocate any procedural GPU buffers. Resource generations do not imply anima
 
 `check` runs frozen 2.3.0 world/preview/output constructor bytecode against the current core jar,
 in addition to the existing API/provider and 2.1.2 adapter checks.
+
+## Optional retained scene output (2.5.0 development)
+
+`ClientRuntime` also implements `ScenePort.renderScene(FrameScene)`. Call this or
+`ClientPort.renderFrame` once per logical frame, never both. The output shares the existing
+simulation, animation and anchor calculation. `SceneDraw` contains a stable key, shared local
+geometry, an absolute double origin, column-major float placement and explicit normal matrices.
+The raster root transform and lightmap brightness are excluded from this world-scene output.
+
+For mesh and ordinary primitives, the normal matrix is the inverse transpose of the placement's
+linear part. Retained output inverts in double precision before narrowing to float, without a
+fixed determinant-magnitude cutoff; small invertible scales remain valid. Explicit camera-facing
+normals retain their own convention. An unrepresentable float normal matrix is diagnosed, not
+silently replaced by identity. A singular placement retains a finite placeholder normal matrix
+so the host can diagnose and reject the original placement; the placeholder is not a valid inverse.
+Legacy raster constructors and their existing fallback rules remain unchanged.
 
 ## Preview anchor providers (since 2.3.0)
 
@@ -338,7 +354,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current release is **2.4.2** with tag **v2.4.2**;
+Feature version is in `gradle.properties`; the development version is **2.5.0**.
+The latest published release is **2.4.2** with tag **v2.4.2**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

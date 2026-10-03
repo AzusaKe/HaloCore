@@ -13,6 +13,7 @@ public final class DefinitionSnapshot {
     private final Map<Identifier, HaloDefinition> definitions;
     private final AssetDependencies assets;
     private final Set<Identifier> legacyTextures;
+    private final Set<Identifier> baseTextures, maskTextures;
     private network.azusake.halo.render.PrimitiveGeometries primitives;
 
     DefinitionSnapshot(Map<Identifier, HaloDefinition> definitions) {
@@ -26,9 +27,23 @@ public final class DefinitionSnapshot {
             collectLegacy(group, legacy);
         }));
         legacyTextures = Set.copyOf(legacy);
+        var bases = new LinkedHashSet<>(legacy);
+        var masks = new LinkedHashSet<Identifier>();
+        this.definitions.values().forEach(def -> def.model().groups().forEach(group -> collectUsages(group, bases, masks)));
+        baseTextures = Set.copyOf(bases); maskTextures = Set.copyOf(masks);
     }
 
     public Set<Identifier> legacyTextures() { return legacyTextures; }
+    /** Independent sampling usages: one resource may be both sRGB base color and linear mask data. */
+    public Set<Identifier> baseTextures() { return baseTextures; }
+    public Set<Identifier> maskTextures() { return maskTextures; }
+    private static void collectUsages(HaloGroup group, Set<Identifier> bases, Set<Identifier> masks) {
+        for (var primitive : group.primitives()) if (primitive instanceof MeshPrimitive mesh) {
+            bases.add(mesh.texture());
+            if (mesh.material().mask() != null) masks.add(mesh.material().mask().texture());
+        }
+        group.children().forEach(child -> collectUsages(child, bases, masks));
+    }
     public Map<Identifier, network.azusake.halo.core.render.PrimitiveGeometry> primitiveGeometries() { return preparedPrimitives().snapshot(); }
     /** Client loading-stage preparation; dedicated servers never need to allocate drawing geometry. */
     synchronized network.azusake.halo.render.PrimitiveGeometries preparedPrimitives() {

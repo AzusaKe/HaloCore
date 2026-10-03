@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.5.0 development — 2026-10-03
+
+- Add optional `ScenePort` retained world-scene output with stable command identity,
+  shared local geometry, absolute double origins, explicit transforms and evaluated materials.
+  Existing `ClientPort`, frame constructors and raster output remain compatible.
+- Reuse the same animation, physics and anchor evaluation once per logical frame;
+  preserve authored mesh UVs, normals, origin, mirroring and primitive facing conventions.
+- Compute retained inverse-transpose normal matrices in double precision without a
+  determinant-magnitude cutoff. Cover tiny, mirrored, nonuniform and singular placements.
+- Keep the contract independent of loaders, Minecraft and graphics APIs. This is a
+  development revision, without a new release tag.
+
 ## 2.4.2 — 2026-09-20
 
 - Add full-view transparent triangle ordering, constraining overlapping triangles by their
