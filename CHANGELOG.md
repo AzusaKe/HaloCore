@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.5.0 development — 2026-10-03
+## 2.5.0 — 2026-10-03
 
 - Add optional `ScenePort` retained world-scene output with stable command identity,
   shared local geometry, absolute double origins, explicit transforms and evaluated materials.
@@ -9,8 +9,9 @@
   preserve authored mesh UVs, normals, origin, mirroring and primitive facing conventions.
 - Compute retained inverse-transpose normal matrices in double precision without a
   determinant-magnitude cutoff. Cover tiny, mirrored, nonuniform and singular placements.
-- Keep the contract independent of loaders, Minecraft and graphics APIs. This is a
-  development revision, without a new release tag.
+- Keep the contract independent of loaders, Minecraft and graphics APIs, with Java 17
+  bytecode and the existing Gson/JOML implementation dependencies.
+- Include the MIT license notice in both the runtime and sources jars.
 
 ## 2.4.2 — 2026-09-20
 

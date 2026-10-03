@@ -1,4 +1,4 @@
-# HaloCore 2.5.0 development
+# HaloCore 2.5.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -103,7 +103,7 @@ not allocate any procedural GPU buffers. Resource generations do not imply anima
 `check` runs frozen 2.3.0 world/preview/output constructor bytecode against the current core jar,
 in addition to the existing API/provider and 2.1.2 adapter checks.
 
-## Optional retained scene output (2.5.0 development)
+## Optional retained scene output (since 2.5.0)
 
 `ClientRuntime` also implements `ScenePort.renderScene(FrameScene)`. Call this or
 `ClientPort.renderFrame` once per logical frame, never both. The output shares the existing
@@ -354,8 +354,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the development version is **2.5.0**.
-The latest published release is **2.4.2** with tag **v2.4.2**;
+Feature version is in `gradle.properties`; the current release is **2.5.0** with tag **v2.5.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.
