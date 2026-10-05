@@ -8,8 +8,16 @@ public sealed interface MaterialState permits MaterialState.Legacy, MaterialStat
     MaterialState LEGACY = new Legacy();
     record Legacy() implements MaterialState {}
     /** Null mask means ordinary textured mesh rendering, with no alpha cutoff except zero. */
-    record Mesh(AlphaMask mask, BaMaterial ba) implements MaterialState {
+    record Mesh(AlphaMask mask, BaMaterial ba, LightSample baEnvironmentLight) implements MaterialState {
+        public Mesh {
+            baEnvironmentLight=ba==null ? LightSample.UNAVAILABLE : Objects.requireNonNull(baEnvironmentLight);
+        }
+        public Mesh(AlphaMask mask, BaMaterial ba) { this(mask,ba,LightSample.UNAVAILABLE); }
         public Mesh(AlphaMask mask) { this(mask, null); }
+        /** BA uses actual ambient input even in a legacy glowing group; fallback retains authored light. */
+        public LightSample light(boolean baProgram,LightSample legacy) {
+            return baProgram && ba!=null && baEnvironmentLight.available() ? baEnvironmentLight : legacy;
+        }
     }
     enum MaskMode { LINEAR, STEP }
     record AlphaMask(Identifier texture, MaskMode mode, float threshold, float offsetU, float offsetV) {

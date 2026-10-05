@@ -48,6 +48,11 @@ public final class MeshGeometryRenderer {
 
     public void add(MeshPrimitive primitive, Matrix4f parent, float alpha, float brightness, double time,
                     LightSample light, boolean directionalLighting) {
+        add(primitive,parent,alpha,brightness,time,light,directionalLighting,light);
+    }
+
+    public void add(MeshPrimitive primitive, Matrix4f parent, float alpha, float brightness, double time,
+                    LightSample light, boolean directionalLighting, LightSample baEnvironmentLight) {
         if (alpha <= 0) return;
         TriangleMesh mesh = resources.meshes().get(primitive.model());
         var texture = resources.textures().get(primitive.texture());
@@ -73,7 +78,7 @@ public final class MeshGeometryRenderer {
             MeshDraw draw = new MeshDraw(primitive.model(), primitive.texture(), matrix,
                 !primitive.material().doubleSided(), blend, true, !blend,
                 brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask,
-                    resources.baMaterials().get(new network.azusake.halo.core.render.BaMaterial.Key(primitive.model(), primitive.texture()))), light,
+                    resources.baMaterials().get(new network.azusake.halo.core.render.BaMaterial.Key(primitive.model(), primitive.texture())), baEnvironmentLight), light,
                 directionalLighting);
             if (blend) {
                 Vec3d center = mesh.center();

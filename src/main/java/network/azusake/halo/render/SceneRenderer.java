@@ -491,7 +491,7 @@ public final class SceneRenderer {
                 } else if (primitive instanceof MeshPrimitive mesh) {
                     meshDraw.add(mesh, matrices.peek().getPositionMatrix(), finalAlpha,
                         group.glowing() ? effectiveGlow : brightness, animTime, groupLight,
-                        !group.glowing());
+                        !group.glowing(), ambientLight);
                 }
             }
 

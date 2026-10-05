@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0-ba.2 — 2026-10-05 (local experiment)
+
+- Preserve actual environment light for BA meshes even when legacy groups default
+  to glowing; retain the authored full-bright light for ordinary program fallback.
+- Reconstruct moving helper orientation from the actual inverse view rotation.
+  Cover camera pitch/yaw invariance, darkness, and the default-glowing runtime path.
+- Preserve previous mesh/material constructors and non-BA behavior.
+
 ## 2.5.0-ba.1 — 2026-10-05 (local experiment)
 
 - Add versioned BA artistic materials, raw companion discovery, immutable parameters and

@@ -109,6 +109,23 @@ class MeshRuntimePipelineTest {
         assertEquals(.5f, emissive.meshes().get(0).red(), 1e-6);
     }
 
+    @Test void automaticBaMaterialsUseEnvironmentEvenWhenLegacyGroupDefaultsToGlowing() {
+        var ba = new BaMaterial(BaMaterial.Type.HAIR, null, null, BaMaterial.defaults(BaMaterial.Type.HAIR));
+        var assets = new VisualResources(2, ASSETS.meshes(), ASSETS.textures(),
+            Map.of(new BaMaterial.Key(MODEL, TEX), ba));
+        for (var environment : List.of(new LightSample(0, 15), new LightSample(0, 0))) {
+            var draw = client("", group(MESH)).renderFrame(frame(assets, environment)).meshes().get(0);
+            assertEquals(LightSample.FULL_BRIGHT, draw.light());
+            assertFalse(draw.directionalLighting());
+            assertEquals(environment, draw.material().baEnvironmentLight());
+            assertEquals(environment, draw.material().light(true, draw.light()));
+            assertEquals(LightSample.FULL_BRIGHT, draw.material().light(false, draw.light()));
+        }
+        var old = client("", group(MESH)).renderFrame(frame(ASSETS, new LightSample(0, 0))).meshes().get(0);
+        assertNull(old.material().ba());
+        assertEquals(LightSample.FULL_BRIGHT, old.material().light(true, old.light()));
+    }
+
     @Test void startupAndShutdownFreezeMaskAtExistingIdlePhase() {
         String extra = """
             "startup":{"segments":[{"duration":1,"offset":{"from":[0,0,0]}}]},

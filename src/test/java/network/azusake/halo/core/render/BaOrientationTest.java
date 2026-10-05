@@ -6,6 +6,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BaOrientationTest {
     static float[] rotation(Matrix3f m) { return m.get(new float[9]); }
+    @Test void pitchedViewDoesNotRotateTheWorldHelperOrDoubleCameraMotion() {
+        var p=BaMaterial.defaults(BaMaterial.Type.HAIR);
+        Matrix3f part=new Matrix3f().rotationYXZ(.4f,-.2f,.1f).scale(2,3,4);
+        Vector3f worldIncoming=new Vector3f(.2f,.3f,1).normalize();
+        var baseline=BaOrientation.sample(rotation(part),rotation(new Matrix3f()),p);
+        Vector3f expected=new Matrix3f().set(baseline.viewToReference()).transform(new Vector3f(worldIncoming));
+        for(float pitch:new float[]{-.8f,-.1f,0,.3f,.8f}) for(float yaw:new float[]{0,.5f,1.8f,3.1f}) {
+            Matrix3f view=new Matrix3f().rotationX(pitch).rotateY(yaw+(float)java.lang.Math.PI);
+            Matrix3f inverse=new Matrix3f(view).invert();
+            var sample=BaOrientation.fromView(rotation(new Matrix3f(view).mul(part)),rotation(inverse),p);
+            assertArrayEquals(baseline.objectDirection(),sample.objectDirection(),2e-5f);
+            Vector3f incoming=view.transform(new Vector3f(worldIncoming));
+            Vector3f actual=new Matrix3f().set(sample.viewToReference()).transform(incoming);
+            assertTrue(actual.equals(expected,2e-5f));
+        }
+    }
     @Test void movingCameraChangesViewBasisButNotObjectHelper() {
         var p=BaMaterial.defaults(BaMaterial.Type.HAIR);
         var identity=rotation(new Matrix3f());

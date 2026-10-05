@@ -11,6 +11,12 @@ public final class BaOrientation {
         @Override public float[] viewToReference() { return viewToReference.clone(); }
         @Override public float[] objectDirection() { return objectDirection.clone(); }
     }
+    /** Reconstruct part/world rotation from the exact inverse of the submitted view matrix. */
+    public static Sample fromView(float[] modelToView,float[] viewToWorld,BaMaterial.Parameters p) {
+        if(modelToView.length!=9 || viewToWorld.length!=9) throw new IllegalArgumentException("BA orientation needs 3x3 rotations");
+        Matrix3f partToWorld=new Matrix3f().set(viewToWorld).mul(new Matrix3f().set(modelToView));
+        return sample(partToWorld.get(new float[9]),viewToWorld,p);
+    }
     public static Sample sample(float[] modelToWorld,float[] viewToWorld,BaMaterial.Parameters p) {
         if(modelToWorld.length!=9 || viewToWorld.length!=9) throw new IllegalArgumentException("BA orientation needs 3x3 rotations");
         Matrix3f export=new Matrix3f().rotationX(-(float)java.lang.Math.PI/2);

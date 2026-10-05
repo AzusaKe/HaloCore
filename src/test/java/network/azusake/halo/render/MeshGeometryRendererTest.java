@@ -57,10 +57,15 @@ class MeshGeometryRendererTest {
         var assets = new VisualResources(1,original.meshes(),original.textures(),
             Map.of(new BaMaterial.Key(MODEL,TEX),material));
         var renderer = new MeshGeometryRenderer(message -> fail(message)); renderer.begin(assets);
-        renderer.add(primitive(null),new Matrix4f(),1,1,0,LightSample.FULL_BRIGHT,false);
+        LightSample ambient=new LightSample(0,7);
+        renderer.add(primitive(null),new Matrix4f(),1,1,0,LightSample.FULL_BRIGHT,false,ambient);
         var output=renderer.finish(List.of());
         assertSame(material,output.meshes().get(0).material().ba());
         assertFalse(output.meshes().get(0).directionalLighting());
+        assertEquals(LightSample.FULL_BRIGHT,output.meshes().get(0).light());
+        assertEquals(ambient,output.meshes().get(0).material().light(true,output.meshes().get(0).light()));
+        assertEquals(LightSample.FULL_BRIGHT,output.meshes().get(0).material().light(false,output.meshes().get(0).light()));
+        assertEquals(LightSample.FULL_BRIGHT,new MaterialState.Mesh(null,material).light(true,LightSample.FULL_BRIGHT));
         assertFalse(output.expandedBatches(assets).get(0).directionalLighting());
     }
     @Test void transparentInstancesAndTheirTrianglesAreDepthSortedWithoutReorderingLegacy() {

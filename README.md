@@ -1,4 +1,4 @@
-# HaloCore 2.5.0-ba.1 (experimental)
+# HaloCore 2.5.0-ba.2 (experimental)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -37,6 +37,8 @@ the drawing loop. Existing AlphaMask retains its separate nearest/step contract.
 
 Export Blender world `(x,y,z)` to authored mesh `(x,z,-y)` (right-handed). The host
 supplies column-major model-to-world and view-to-world rotations to `BaOrientation`.
+`fromView` reconstructs the former using the inverse of the actual submitted view
+rotation, not a camera quaternion with a different forward/pitch convention.
 It returns BA_SPEC view-to-reference `Ry(pi/2)*Rx(pi/2)*viewToWorld` and the current
 helper direction. `SpecHelperRotation` is the reference helper's Blender-world
 quaternion `(x,y,z,w)`; moving parts reconstruct WORLD_SPACE driver angles
@@ -46,7 +48,14 @@ point from surface toward camera, and host direct/ambient illumination is suppli
 in that same view space. MC illumination substitutes for Blender Shader-to-RGB;
 artistic ramps and thresholds are preserved, but lighting engines are not identical.
 The Fabric experiment multiplies body/face/hair artist colors by host HDR irradiance
-for environment-dependent brightness; halo and unlit retain their emission semantics.
+for environment-dependent brightness. No-shadow eye/mouth and outline colors use
+isotropic local sky/block irradiance; halo uses that irradiance with a small host
+exposure-compensated emission floor. Fixed-light reference mode retains node emission.
+`MaterialState.Mesh.baEnvironmentLight` preserves the actual local light separately
+from legacy group `glowing` (whose default is true). Hosts call `light(baProgram, legacy)`
+to select it only for a functioning BA program. Darkness (0,0) is valid, while an
+unavailable sample falls back. Old constructors and ordinary/full-bright fallback
+behavior remain available; adding companions requires no group-definition edit.
 
 This first experiment targets Fabric 1.20.1 with an adapted Bliss 2.1.2 release11
 forward program. GPU bindings, render stages, Iris integration and shadow-camera
