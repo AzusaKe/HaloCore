@@ -8,7 +8,9 @@ public sealed interface MaterialState permits MaterialState.Legacy, MaterialStat
     MaterialState LEGACY = new Legacy();
     record Legacy() implements MaterialState {}
     /** Null mask means ordinary textured mesh rendering, with no alpha cutoff except zero. */
-    record Mesh(AlphaMask mask) implements MaterialState {}
+    record Mesh(AlphaMask mask, BaMaterial ba) implements MaterialState {
+        public Mesh(AlphaMask mask) { this(mask, null); }
+    }
     enum MaskMode { LINEAR, STEP }
     record AlphaMask(Identifier texture, MaskMode mode, float threshold, float offsetU, float offsetV) {
         public AlphaMask {

@@ -51,6 +51,18 @@ class MeshGeometryRendererTest {
         assertEquals(0.8944272f, normal.normalY(), 1e-5);
         assertEquals(0, normal.normalZ(), 1e-5);
     }
+    @Test void baMaterialPreservesLegacyLightingForHostFallback() {
+        var original = resources(1,true,4);
+        var material = new BaMaterial(BaMaterial.Type.HAIR,null,null,BaMaterial.defaults(BaMaterial.Type.HAIR));
+        var assets = new VisualResources(1,original.meshes(),original.textures(),
+            Map.of(new BaMaterial.Key(MODEL,TEX),material));
+        var renderer = new MeshGeometryRenderer(message -> fail(message)); renderer.begin(assets);
+        renderer.add(primitive(null),new Matrix4f(),1,1,0,LightSample.FULL_BRIGHT,false);
+        var output=renderer.finish(List.of());
+        assertSame(material,output.meshes().get(0).material().ba());
+        assertFalse(output.meshes().get(0).directionalLighting());
+        assertFalse(output.expandedBatches(assets).get(0).directionalLighting());
+    }
     @Test void transparentInstancesAndTheirTrianglesAreDepthSortedWithoutReorderingLegacy() {
         var resources = resources(1,true,4);
         var renderer = new MeshGeometryRenderer(failMessage -> fail(failMessage)); renderer.begin(resources);

@@ -52,6 +52,20 @@ public final class DefinitionSnapshot {
     }
     public Set<Identifier> ids() { return definitions.keySet(); }
     public AssetDependencies assets() { return assets; }
+    /** Model/texture pairs per definition; automatic BA activation cannot leak between definitions. */
+    public Map<Identifier, Set<network.azusake.halo.core.render.BaMaterial.Key>> meshParts() {
+        var result = new java.util.HashMap<Identifier, Set<network.azusake.halo.core.render.BaMaterial.Key>>();
+        definitions.forEach((id, def) -> {
+            var keys = new LinkedHashSet<network.azusake.halo.core.render.BaMaterial.Key>();
+            def.model().groups().forEach(group -> collectParts(group, keys)); result.put(id, Set.copyOf(keys));
+        });
+        return Map.copyOf(result);
+    }
+    private static void collectParts(HaloGroup group, Set<network.azusake.halo.core.render.BaMaterial.Key> keys) {
+        for (var primitive : group.primitives()) if (primitive instanceof MeshPrimitive mesh)
+            keys.add(new network.azusake.halo.core.render.BaMaterial.Key(mesh.model(), mesh.texture()));
+        group.children().forEach(child -> collectParts(child, keys));
+    }
     public record AssetDependencies(Set<Identifier> models, Set<Identifier> textures) {
         public AssetDependencies { models = Set.copyOf(models); textures = Set.copyOf(textures); }
     }

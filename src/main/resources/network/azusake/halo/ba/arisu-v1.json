@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "source_sha256": "902f66f44d44ddfdd9036213db1e91190973ee7af8c75a74e6b0710f2fdfde22",
+  "profiles": {
+    "body": {
+      "shadowfactor": 0.699999988079071,
+      "shadow_color0": [
+        0.5,
+        0.5,
+        0.5,
+        1.0
+      ],
+      "shadow_color1_clamp": 0.009999999776482582,
+      "shadow_color1": [
+        0.7874819040298462,
+        0.4176985025405884,
+        0.2870011031627655,
+        1.0
+      ],
+      "shadow_color2_clamp": 0.25,
+      "shadow_color2": [
+        0.3571293354034424,
+        0.33289697766304016,
+        0.45407623052597046,
+        1.0
+      ],
+      "shadow_color3_clamp": 0.5,
+      "shadow_color3": [
+        0.0,
+        0.4081914722919464,
+        0.49144604802131653,
+        1.0
+      ],
+      "shadow_color4_clamp": 0.75,
+      "shadow_color4": [
+        0.32713034749031067,
+        0.27042511105537415,
+        0.11491808295249939,
+        1.0
+      ],
+      "shadow_color5_clamp": 0.800000011920929,
+      "shadow_color5": [
+        0.34324362874031067,
+        0.2661992907524109,
+        0.1014552041888237,
+        1.0
+      ],
+      "From Min": 0.10999999940395355,
+      "From Max": 0.11999999731779099,
+      "To Max": 1.0,
+      "Fresnel": 0.5,
+      "shadow_value": 0.10000000149011612,
+      "Value": 0.0
+    },
+    "arms": {
+      "shadowfactor": 0.699999988079071,
+      "shadow_color0": [
+        0.9137899875640869,
+        0.9007141590118408,
+        1.0,
+        1.0
+      ],
+      "shadow_color1_clamp": 0.009999999776482582,
+      "shadow_color1": [
+        0.92822265625,
+        0.81494140625,
+        0.77490234375,
+        1.0
+      ],
+      "shadow_color2_clamp": 0.25,
+      "shadow_color2": [
+        0.03496229276061058,
+        0.0,
+        0.4938342869281769,
+        1.0
+      ],
+      "shadow_color3_clamp": 0.5,
+      "shadow_color3": [
+        0.4974587857723236,
+        0.16531535983085632,
+        0.11846455186605453,
+        1.0
+      ],
+      "shadow_color4_clamp": 0.75,
+      "shadow_color4": [
+        0.0023882389068603516,
+        0.0,
+        0.5,
+        1.0
+      ],
+      "shadow_color5_clamp": 0.800000011920929,
+      "shadow_color5": [
+        0.49817126989364624,
+        0.33812424540519714,
+        0.3597806394100189,
+        1.0
+      ],
+      "From Min": 0.10999999940395355,
+      "From Max": 0.11999999731779099,
+      "To Max": 1.0,
+      "Fresnel": 0.5,
+      "shadow_value": 0.10000000149011612,
+      "Value": 0.0
+    },
+    "face": {
+      "mask": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "mask_alpha": 0.5,
+      "shadowfactor": 0.699999988079071,
+      "shadow_color0": [
+        0.0,
+        1.0,
+        0.053754836320877075,
+        1.0
+      ],
+      "shadow_color1_clamp": 0.009999999776482582,
+      "shadow_color1": [
+        0.0,
+        0.7940558195114136,
+        1.0,
+        1.0
+      ],
+      "shadow_color2_clamp": 0.25,
+      "shadow_color2": [
+        0.0,
+        0.006251709535717964,
+        1.0,
+        1.0
+      ],
+      "shadow_color3_clamp": 0.5,
+      "shadow_color3": [
+        1.0,
+        0.0,
+        0.39765745401382446,
+        1.0
+      ],
+      "shadow_color4_clamp": 0.75,
+      "shadow_color4": [
+        1.0,
+        0.03292066603899002,
+        0.0,
+        1.0
+      ],
+      "shadow_color5_clamp": 0.800000011920929,
+      "shadow_color5": [
+        0.5529927611351013,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "From Min": 0.10999999940395355,
+      "From Max": 0.11999999731779099,
+      "To Max": 1.0,
+      "Fresnel": 0.5,
+      "shadow_value": 0.10000000149011612,
+      "Value": 0.0
+    },
+    "hair": {
+      "highlightcolor_switch": 0,
+      "highlightcolor": [
+        0.35550662875175476,
+        0.35935094952583313,
+        0.4490315914154053,
+        1.0
+      ],
+      "shadowfactor": 0.5,
+      "shadowcolor_switch": 0,
+      "shadowcolor": [
+        0.07831520587205887,
+        0.08272314071655273,
+        0.13120660185813904,
+        1.0
+      ],
+      "AdjustiveHairShadow": 0.0,
+      "MaskGSensitivity": 1.399999976158142,
+      "From Min": 0.0,
+      "From Max": 0.4000000059604645,
+      "SpecDirMultiplier.X": 0.41999998688697815,
+      "SpecDirMultiplier.Y": 0.0,
+      "SpecDirMultiplier.Z": 0.0,
+      "SpecTopMultiplier": 8.800000190734863,
+      "SpecTopLeveler": 7.800000190734863,
+      "SpecBotArea": 0.17000000178813934,
+      "SpecBotMultiplier": 34.60210037231445,
+      "Hardspec": 1,
+      "SpecClamp": 0.0,
+      "SpecStrength": 1.0,
+      "Fresnel": 0.7599999904632568,
+      "object_vector": 1,
+      "view_vector": 1,
+      "Rotation": [
+        0.007897905074059963,
+        -1.7628262042999268,
+        -0.6333768963813782
+      ],
+      "SpecHelperRotation": [
+        -0.2426898330450058,
+        0.19518619775772095,
+        0.7340428233146667,
+        0.6034776568412781
+      ]
+    },
+    "halo": {
+      "Emission_Strength": -0.5000001192092896,
+      "slect_color": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "replace_color": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "replace_clamp": 1000.0,
+      "replace_multiply": 1.0,
+      "Emission_Strength1": 1.0,
+      "mix_fac": 0.0,
+      "mix_color": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "Emission_Strength2": 1.0
+    },
+    "weapon": {
+      "spec_clamp": 0.0,
+      "spec_invert": 0.0,
+      "spec_multiply": 0.5,
+      "spec_mask": 0.30000001192092896,
+      "spec_color": [
+        0.01020833570510149,
+        0.055651504546403885,
+        0.15519386529922485,
+        1.0
+      ],
+      "shadow_factor": 0.75,
+      "AO_Value": 0.0,
+      "metallic": 0.0,
+      "roughness": 0.0,
+      "roughness_invert": 0.0
+    },
+    "unlit": {
+      "Strength": 1.0
+    }
+  }
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.0-ba.1 — 2026-10-05 (local experiment)
+
+- Add versioned BA artistic materials, raw companion discovery, immutable parameters and
+  part/view orientation math without Minecraft or GPU dependencies.
+- Preserve old constructors, resource defaults and authored lighting flags for host fallback.
+- Reference Arisu active Blender node parameters; no other version migration or release tag.
+
 ## 2.4.2 — 2026-09-20
 
 - Add full-view transparent triangle ordering, constraining overlapping triangles by their

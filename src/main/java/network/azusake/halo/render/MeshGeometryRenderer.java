@@ -72,7 +72,8 @@ public final class MeshGeometryRenderer {
             validateBounds(mesh, matrix);
             MeshDraw draw = new MeshDraw(primitive.model(), primitive.texture(), matrix,
                 !primitive.material().doubleSided(), blend, true, !blend,
-                brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask), light,
+                brightness, brightness, brightness, alpha, mirrored, new MaterialState.Mesh(mask,
+                    resources.baMaterials().get(new network.azusake.halo.core.render.BaMaterial.Key(primitive.model(), primitive.texture()))), light,
                 directionalLighting);
             if (blend) {
                 Vec3d center = mesh.center();

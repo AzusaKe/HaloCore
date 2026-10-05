@@ -1,7 +1,58 @@
-# HaloCore 2.4.2
+# HaloCore 2.5.0-ba.1 (experimental)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
+
+## Experimental BA material contract v1
+
+`VisualAssetLoader.load(DefinitionSnapshot)` discovers raw `<base>_mask.png` and
+`<base>_spac.png` using the optional `Source.exists` probe. One valid companion in
+a definition enables its registered mesh part presets. No extra material JSON is
+needed. Removing all companions on the next resource generation restores ordinary
+materials. A legacy Source and the old loader/VisualResources/MaterialState.Mesh
+constructors retain their defaults. Companions never become LabPBR `_n` or `_s`.
+
+`BaMaterial.Key(model,texture)` distinguishes shared textures. Registered complete
+part suffixes match from the right, case-insensitively; character prefixes retain
+their original spelling and underscores. Runtime identifiers remain lowercase as
+required by Minecraft. Model part suffixes precede texture semantics. Missing Mask
+uses the material's original default input; missing Spac disables BA_SPEC. Face,
+halo, eye/mouth and eyebrow can activate from another part's companion in the same
+definition. Unlit, halo and exported flipped outline shells omit shadow submissions;
+ordinary meshes are unchanged. No special eyebrow displacement is enabled.
+
+`BaMaterial.Parameters` is immutable artistic data with the original socket names,
+finite scalar/vector values and v1 defaults in `ba/arisu-v1.json`. The Arisu/CH0334
+reference file's exact instance values also serve as the explicitly chosen v1 type
+defaults for unknown characters; unknown characters are not claimed to match their
+unprovided Blender settings. `BaMath` gives CPU references for strict thresholds,
+unclamped mappings, BA_SPEC, halo selection and exact dielectric Fresnel.
+
+Host colors are scene-linear, with an exact sRGB decode for base colors; raw Mask
+and Spac RGBA are Non-Color, straight/channel-packed alpha, repeated UV, bilinear
+sampling without mipmaps. Preserve all four channels and source dimensions. The
+host uploads complete per-material uniforms on each draw and publishes resources
+as an immutable reload snapshot; never classify textures or perform discovery in
+the drawing loop. Existing AlphaMask retains its separate nearest/step contract.
+
+Export Blender world `(x,y,z)` to authored mesh `(x,z,-y)` (right-handed). The host
+supplies column-major model-to-world and view-to-world rotations to `BaOrientation`.
+It returns BA_SPEC view-to-reference `Ry(pi/2)*Rx(pi/2)*viewToWorld` and the current
+helper direction. `SpecHelperRotation` is the reference helper's Blender-world
+quaternion `(x,y,z,w)`; moving parts reconstruct WORLD_SPACE driver angles
+`(-rotX,-rotZ,-rotY)` before Euler XYZ rotation. It is not a frozen frame Euler.
+Normals use the full inverse-transpose model/view matrix, incoming view directions
+point from surface toward camera, and host direct/ambient illumination is supplied
+in that same view space. MC illumination substitutes for Blender Shader-to-RGB;
+artistic ramps and thresholds are preserved, but lighting engines are not identical.
+The Fabric experiment multiplies body/face/hair artist colors by host HDR irradiance
+for environment-dependent brightness; halo and unlit retain their emission semantics.
+
+This first experiment targets Fabric 1.20.1 with an adapted Bliss 2.1.2 release11
+forward program. GPU bindings, render stages, Iris integration and shadow-camera
+submission belong entirely to the adapter. Other packs and program failures must
+fall back. OBJ fixtures retain evaluated geometry and corner normals but not a
+Blender skeleton; helper motion follows the part's runtime transform.
 
 ```sh
 ./gradlew build
