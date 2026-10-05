@@ -47,10 +47,11 @@ Normals use the full inverse-transpose model/view matrix, incoming view directio
 point from surface toward camera, and host direct/ambient illumination is supplied
 in that same view space. MC illumination substitutes for Blender Shader-to-RGB;
 artistic ramps and thresholds are preserved, but lighting engines are not identical.
-The Fabric experiment multiplies body/face/hair artist colors by host HDR irradiance
-for environment-dependent brightness. No-shadow eye/mouth and outline colors use
-isotropic local sky/block irradiance; halo uses that irradiance with a small host
-exposure-compensated emission floor. Fixed-light reference mode retains node emission.
+The Fabric experiment preserves node emission palettes and applies a shared scalar
+environment brightness gain to body/face/hair and no-shadow eye/mouth/outline.
+The HALO suffix preset instead uses independent exposure-compensated emission,
+with an adapter-wide gain that preserves the original node color/strength.
+Fixed-light reference mode retains node emission without adaptation.
 `MaterialState.Mesh.baEnvironmentLight` preserves the actual local light separately
 from legacy group `glowing` (whose default is true). Hosts call `light(baProgram, legacy)`
 to select it only for a functioning BA program. Darkness (0,0) is valid, while an

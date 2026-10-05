@@ -44,11 +44,20 @@ class BaResourcesTest {
         assertEquals(BaMaterial.Type.FACE,face.type()); assertNull(face.mask());
         var eyebrow=enabled.baMaterials().get(new BaMaterial.Key(new Identifier("model:meshes/a_b_eyebrow.obj"),BODY));
         assertEquals(BaMaterial.Type.UNLIT,eyebrow.type()); assertFalse(eyebrow.castsShadow());
+        var halo=enabled.baMaterials().get(new BaMaterial.Key(new Identifier("model:meshes/a_b_halo.obj"),BODY));
+        assertEquals(BaMaterial.Type.HALO,halo.type()); assertFalse(halo.castsShadow());
         assertTrue(loader(3,Set.of()).load(definitions).baMaterials().isEmpty());
         assertEquals(2,enabled.generation()); assertTrue(original.baMaterials().isEmpty());
         assertThrows(UnsupportedOperationException.class, () -> enabled.baMaterials().clear());
         assertNull(new MaterialState.Mesh(null).ba());
         assertTrue(new VisualResources(0,Map.of(),Map.of()).baMaterials().isEmpty());
+    }
+    @Test void arbitraryCharacterHaloSuffixUsesHaloPresetWithoutConfusingOutline() {
+        var texture=new Identifier("model:textures/another_character_halo.png");
+        var halo=BaMaterial.resolve(new BaMaterial.Key(new Identifier("model:meshes/unregistered.obj"),texture),null,null);
+        assertEquals(BaMaterial.Type.HALO,halo.type());
+        assertEquals("another_character",BaMaterial.identify("another_character_HALO.png").orElseThrow().character());
+        assertEquals(BaMaterial.Type.OUTLINE,BaMaterial.identify("another_character_halo_outline.png").orElseThrow().type());
     }
     @Test void missingSpecLeavesMaskActiveAndOlderSourcesNeverOptIn() {
         var result=loader(1,Set.of(BaMaterial.companion(HAIR,"mask"))).load(definition());
