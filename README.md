@@ -3,6 +3,21 @@
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
 
+## Experiment evaluation (2026-10-06)
+
+The user accepted the tested BA appearance but decided not to merge BA character
+materials into the core or adapter mainline: Halo should remain focused on halos,
+and the experimental adapter/shader has a confirmed ordinary LabPBR material regression.
+Its cause and remedy remain unverified. This branch is a retained experiment, not a
+mainline compatibility endorsement.
+
+Outlines and ground-cast model shadows are selected for future independent mainline
+adaptation. They must be separated from BA material discovery and the dedicated shader,
+with ordinary material/AlphaMask/pose/depth/fallback regression checks and any necessary
+platform-neutral contracts evaluated separately. No such migration is included here.
+The shader archive and evaluation record are kept in the Halo experimental repository;
+the user requested that Arisu model and texture resource packs remain local.
+
 ## Experimental BA material contract v1
 
 `VisualAssetLoader.load(DefinitionSnapshot)` discovers raw `<base>_mask.png` and
