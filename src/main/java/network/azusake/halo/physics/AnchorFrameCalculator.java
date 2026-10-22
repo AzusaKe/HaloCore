@@ -57,6 +57,9 @@ public final class AnchorFrameCalculator {
      */
     private static final double LOCKED_ANGULAR_K = 0.5;
 
+    /** Unit-direction tolerance, above float quaternion projection noise. */
+    private static final double DIRECTION_EPSILON = 1e-6;
+
     // ---- per-frame position state ----
     private final Map<UUID, Vec3d> prevFramePos = new HashMap<>();
 
@@ -99,7 +102,7 @@ public final class AnchorFrameCalculator {
         if (radial.lengthSquared() == 0) radial = new Vec3d(0, 1, 0);
         Vec3d toHead = radial.multiply(-1);
         Quaternionf look = computeLookAtOrientation(toHead);
-        Quaternionf rest = computeLockedSpin(look, toHead, new Vec3d(0, 1, 0), radial).mul(look);
+        Quaternionf rest = computeLockedSpin(look, toHead, new Vec3d(0, 1, 0), new Vec3d(0, 0, 1), radial).mul(look);
         rest = new Quaternionf(definition.model().syncOffset()).mul(rest);
         Quaternionf head = toQuaternion(pose.rotation());
         Quaternionf rotation = new Quaternionf(head).mul(rest);
@@ -222,7 +225,7 @@ public final class AnchorFrameCalculator {
                 // The "up pole" is 90° from P along the headUp great circle.
                 // The halo's +Z should point toward this pole like a compass.
                 Vec3d P = anchorDirection; // anchor-point radial direction, defined even at zero offset
-                Quaternionf Q_target = computeLockedSpin(Q_lookAt, toHead, headUp, P);
+                Quaternionf Q_target = computeLockedSpin(Q_lookAt, toHead, headUp, forward, P);
 
                 // Retrieve or initialise the damped locked-spin state
                 Quaternionf prevSpin = lockedSpinStates.get(uuid);
@@ -277,7 +280,7 @@ public final class AnchorFrameCalculator {
                 Quaternionf Q_rel = syncRelativeStates.get(uuid);
                 if (Q_rel == null || needsSnap) {
                     Vec3d P = anchorDirection;
-                    Quaternionf Q_lockedSpin = computeLockedSpin(Q_lookAt, toHead, headUp, P);
+                    Quaternionf Q_lockedSpin = computeLockedSpin(Q_lookAt, toHead, headUp, forward, P);
                     Quaternionf Q_LOCKED = Q_lockedSpin.mul(Q_lookAt, new Quaternionf());
 
                     Quaternionf Q_syncOffset = definition.model().syncOffset();
@@ -440,6 +443,9 @@ public final class AnchorFrameCalculator {
      * direction; its midpoint between {@code P} and the antipode {@code -P}
      * is the <b>up pole</b> — a fixed reference point 90° from {@code P}
      * along the head-up great circle.</p>
+     * <p>At a head-up/down pole that tangent is undefined. Use head-forward there,
+     * including a small tolerance for quaternion projection noise. A world-up fallback
+     * would change sign under arbitrarily small pitch changes and stay reversed at rest.</p>
      *
      * <p>In {@link OrientationMode#LOCKED}, the halo's +Z axis should point
      * toward this up pole like a compass needle.  This keeps the relative
@@ -451,12 +457,13 @@ public final class AnchorFrameCalculator {
      * @param Q_lookAt shortest-arc rotation mapping definition -Y → toHead
      * @param toHead   unit vector from halo toward entity head (halo normal)
      * @param headUp   entity's head-up direction (world space)
+     * @param headForward entity's head-forward direction; resolves the polar reference
      * @param P        unit vector from head to the halo's anchor point
      *                 (= {@code normalize(headRelOffset)})
      * @return spin quaternion around toHead
      */
     static Quaternionf computeLockedSpin(Quaternionf Q_lookAt, Vec3d toHead,
-                                          Vec3d headUp, Vec3d P) {
+                                          Vec3d headUp, Vec3d headForward, Vec3d P) {
         // ---- 1. Locate the "up pole" on the sphere ----
         // The up pole is headUp projected onto the tangent plane at P (⟂ P),
         // then normalized.  It is a fixed point 90° from P on the sphere.
@@ -464,19 +471,17 @@ public final class AnchorFrameCalculator {
         Vec3d t_up_raw = headUp.subtract(P.multiply(dotUP));
         double tLen = t_up_raw.length();
         Vec3d Pole_up; // unit vector — the up pole position on the sphere
-        if (tLen > 1e-9) {
-            Pole_up = t_up_raw.normalize();
+        if (tLen > DIRECTION_EPSILON) {
+            Pole_up = t_up_raw.multiply(1.0 / tLen);
         } else {
-            // headUp is parallel to P — fall back to world-up projected onto ⟂ P
-            Vec3d fallback = new Vec3d(0, 1, 0).subtract(P.multiply(P.y));
+            // Above/below the head, head-up has no tangent component. World-up would
+            // reverse when pitch crosses zero, even at rest. Use the head's forward.
+            Vec3d fallback = headForward.subtract(P.multiply(headForward.dotProduct(P)));
             double fbLen = fallback.length();
-            if (fbLen > 1e-9) {
-                Pole_up = fallback.normalize();
+            if (fbLen > DIRECTION_EPSILON) {
+                Pole_up = fallback.multiply(1.0 / fbLen);
             } else {
-                // P is also world-up → use an arbitrary horizontal reference
-                Pole_up = Math.abs(P.x) < 0.9
-                    ? new Vec3d(1, 0, 0).crossProduct(P).normalize()
-                    : new Vec3d(0, 0, 1).crossProduct(P).normalize();
+                return new Quaternionf(); // invalid/degenerate basis; never normalize a zero vector
             }
         }
 
@@ -488,8 +493,8 @@ public final class AnchorFrameCalculator {
         Vec3d Z_proj = Pole_up.subtract(toHead.multiply(dotPT));
         double zLen = Z_proj.length();
         Vec3d Z_target; // where definition +Z SHOULD point (world space)
-        if (zLen > 1e-9) {
-            Z_target = Z_proj.normalize();
+        if (zLen > DIRECTION_EPSILON) {
+            Z_target = Z_proj.multiply(1.0 / zLen);
         } else {
             // Pole is parallel to toHead → spin is irrelevant; no correction
             return new Quaternionf(); // identity spin
@@ -499,14 +504,8 @@ public final class AnchorFrameCalculator {
         Vec3d Z_current = rotate(new Vec3d(0, 0, 1), Q_lookAt);
 
         // ---- 4. Signed angle from Z_current to Z_target around toHead ----
-        double cosPhi = Z_current.dotProduct(Z_target);
-        cosPhi = Math.max(-1.0, Math.min(1.0, cosPhi));
-        double phi = Math.acos(cosPhi);
-
         Vec3d crossZF = Z_current.crossProduct(Z_target);
-        if (crossZF.dotProduct(toHead) < 0) {
-            phi = -phi;
-        }
+        double phi = Math.atan2(crossZF.dotProduct(toHead), Z_current.dotProduct(Z_target));
 
         if (Math.abs(phi) < 1e-9) {
             return new Quaternionf(); // identity spin

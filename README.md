@@ -1,4 +1,4 @@
-# HaloCore 2.5.0
+# HaloCore 2.5.1 (development)
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -255,7 +255,10 @@ Changing effective offset, orientation mode or SYNC offset resets that wearer's 
 on the next valid sample, including repeated-timestamp preview samples. Ownership and
 animation progress survive. Texture/layer-only reloads preserve physics. Teleports still
 recapture SYNC. These are internal behavior corrections; JSON schema and public APIs are unchanged.
-The existing LOCKED pole and damping algorithms are unchanged in this first repair stage.
+The initial SYNC-only repair preserves LOCKED behavior; the following LOCKED correction
+uses head-forward when the head-up pole is degenerate (directly above/below the head),
+instead of world-up, which reverses as pitch crosses zero. Nonpolar sphere references
+and the damping parameters remain unchanged.
 
 ## Frame and coordinate contract
 
@@ -369,7 +372,8 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the current release is **2.5.0** with tag **v2.5.0**;
+Feature version is in `gradle.properties`; the development version is **2.5.1**.
+The latest release is **2.5.0** with tag **v2.5.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.
 The earlier refactor baseline is **1.3.1**, schema **1.0.10**; old definitions remain supported.

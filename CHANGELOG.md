@@ -6,7 +6,11 @@
   LOCKED basis out of world space, fixing dependence on the first head orientation.
 - Reset world/physical-preview motion when effective offset, orientation mode or
   SYNC offset changes. Preserve ownership, animation clocks and motion across
-  unrelated definition reloads. Keep LOCKED pole and damping algorithms unchanged.
+  unrelated definition reloads.
+- Resolve a LOCKED polar offset using head-forward instead of world-up, fixing
+  persistent 180-degree spin reversals during tiny pitch changes around straight ahead.
+  Use consistent direction normalization and a signed atan2 spin angle; retain the
+  existing nonpolar sphere rule, position damping and angular momentum behavior.
 - Add world-body, ordered-geometry, teleport, reload and isolated-preview regression
   coverage. No schema, storage, protocol or public API changes.
 

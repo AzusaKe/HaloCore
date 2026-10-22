@@ -146,7 +146,8 @@ class AnchorFrameCalculatorTest {
                 Vec3d headUp = HeadFrameMath.of(0f, 0f, roll).headUp();
 
                 Quaternionf Q_lookAt = AnchorFrameCalculator.computeLookAtOrientation(TO_HEAD);
-                Quaternionf spin = AnchorFrameCalculator.computeLockedSpin(Q_lookAt, TO_HEAD, headUp, P);
+                Quaternionf spin = AnchorFrameCalculator.computeLockedSpin(Q_lookAt, TO_HEAD, headUp,
+                    HeadFrameMath.of(0f, 0f, roll).forward(), P);
 
                 // Expected: the up pole (headUp projected onto the tangent plane
                 // at P), which is already perpendicular to toHead = -P here.
@@ -163,9 +164,9 @@ class AnchorFrameCalculatorTest {
             Quaternionf Q_lookAt = AnchorFrameCalculator.computeLookAtOrientation(TO_HEAD);
 
             Quaternionf spinUpright = AnchorFrameCalculator.computeLockedSpin(
-                Q_lookAt, TO_HEAD, new Vec3d(0, 1, 0), P);
+                Q_lookAt, TO_HEAD, new Vec3d(0, 1, 0), new Vec3d(0, 0, 1), P);
             Quaternionf spinRolled = AnchorFrameCalculator.computeLockedSpin(
-                Q_lookAt, TO_HEAD, new Vec3d(-1, 0, 0), P);
+                Q_lookAt, TO_HEAD, new Vec3d(-1, 0, 0), new Vec3d(0, 0, 1), P);
 
             assertNotEquals(spinUpright, spinRolled, "roll must change the locked spin");
         }
