@@ -75,6 +75,16 @@ public final class AnchorFrameCalculator {
     // ---- per-instance SYNC relative orientation (captured on first frame) ----
     private final Map<UUID, Quaternionf> syncRelativeStates = new HashMap<>();
 
+    // Definition identity is not a motion input: a texture-only reload must preserve physics.
+    private final Map<UUID, OrientationInputs> orientationInputs = new HashMap<>();
+
+    record OrientationInputs(Vec3d offset, OrientationMode mode, Quaternionf syncOffset) {}
+
+    static OrientationInputs orientationInputs(HaloDefinition definition, HaloConfig runtime) {
+        return new OrientationInputs(getEffectiveOffset(definition, runtime),
+            definition.model().orientationMode(), definition.model().syncOffset());
+    }
+
     public AnchorFrameCalculator() { /* singleton */ }
 
     // ------------------------------------------------------------------
@@ -129,6 +139,14 @@ public final class AnchorFrameCalculator {
     public AnchorFrame calculate(UUID uuid, boolean needsSnap, AnchorPose pose, AnchorPose fallbackPose,
                                  HaloDefinition definition, Vec3d cameraPosition, double frameDt, HaloConfig runtime) {
 
+        OrientationInputs inputs = orientationInputs(definition, runtime);
+        OrientationInputs previousInputs = orientationInputs.get(uuid);
+        if (previousInputs != null && !previousInputs.equals(inputs)) {
+            clearMotion(uuid);
+            needsSnap = true;
+        }
+        orientationInputs.put(uuid, inputs);
+
         // Hold the last good pose if an integration ever returns transient bad data.
         if (!isFinite(pose)) {
             AnchorPose lastGood = lastGoodAnchors.get(uuid);
@@ -140,7 +158,7 @@ public final class AnchorFrameCalculator {
         Quaternionf headRotation = toQuaternion(pose.rotation());
 
         // 2. Head-relative offset → world-space target position
-        Vec3d offset = getEffectiveOffset(definition, runtime);
+        Vec3d offset = inputs.offset();
         Vec3d headRelOffset = computeHeadRelativeOffset(headRotation, offset);
         Vec3d targetPos = headAnchor.add(headRelOffset);
 
@@ -252,13 +270,10 @@ public final class AnchorFrameCalculator {
                 Quaternionf Q_head = new Quaternionf(headRotation);
 
                 // Retrieve or capture the fixed relative rotation.
-                // First frame: Q_halo(0) = Q_syncOffset × Q_LOCKED.
-                //   Q_rel = Q_head(0)⁻¹ × Q_halo(0)
-                // Subsequent frames:
-                //   Q_halo(t) = Q_head(t) × Q_rel
-                //            = Q_head(t) × Q_head(0)⁻¹ × Q_syncOffset × Q_LOCKED(0)
-                // The head delta Q_head(t) × Q_head(0)⁻¹ is applied on the
-                // OUTSIDE — the halo rotates with the head in world space.
+                // Capture LOCKED in head-local coordinates before applying the offset.
+                // C = Q_head(0)⁻¹ × Q_LOCKED(0)
+                // Q_rel = Q_syncOffset × C (offset axes belong to the head)
+                // Q_halo(t) = Q_head(t) × Q_rel
                 Quaternionf Q_rel = syncRelativeStates.get(uuid);
                 if (Q_rel == null || needsSnap) {
                     Vec3d P = anchorDirection;
@@ -266,9 +281,9 @@ public final class AnchorFrameCalculator {
                     Quaternionf Q_LOCKED = Q_lockedSpin.mul(Q_lookAt, new Quaternionf());
 
                     Quaternionf Q_syncOffset = definition.model().syncOffset();
-                    Quaternionf Q_halo_0 = new Quaternionf(Q_syncOffset).mul(Q_LOCKED);
                     Quaternionf Q_head_0_inv = new Quaternionf(Q_head).conjugate();
-                    Q_rel = new Quaternionf(Q_head_0_inv).mul(Q_halo_0);
+                    Quaternionf Q_relBase = Q_head_0_inv.mul(Q_LOCKED);
+                    Q_rel = new Quaternionf(Q_syncOffset).mul(Q_relBase);
 
                     syncRelativeStates.put(uuid, new Quaternionf(Q_rel));
                 }
@@ -355,8 +370,14 @@ public final class AnchorFrameCalculator {
      * Remove state entries for UUIDs that are no longer visible.
      */
     public void clearEntity(UUID uuid) {
+        clearMotion(uuid);
+        lastGoodAnchors.remove(uuid);
+    }
+
+    private void clearMotion(UUID uuid) {
         prevFramePos.remove(uuid); rotationStates.remove(uuid); lockedSpinStates.remove(uuid);
-        syncRelativeStates.remove(uuid); lastGoodAnchors.remove(uuid);
+        syncRelativeStates.remove(uuid);
+        orientationInputs.remove(uuid);
     }
 
     public void retainOnly(Set<UUID> activeUuids) {
@@ -365,6 +386,7 @@ public final class AnchorFrameCalculator {
         lockedSpinStates.keySet().retainAll(activeUuids);
         syncRelativeStates.keySet().retainAll(activeUuids);
         lastGoodAnchors.keySet().retainAll(activeUuids);
+        orientationInputs.keySet().retainAll(activeUuids);
     }
 
     // ------------------------------------------------------------------

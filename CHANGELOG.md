@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — 2.5.1 development
+
+- Apply SYNC `sync_offset` around head-local axes after converting the captured
+  LOCKED basis out of world space, fixing dependence on the first head orientation.
+- Reset world/physical-preview motion when effective offset, orientation mode or
+  SYNC offset changes. Preserve ownership, animation clocks and motion across
+  unrelated definition reloads. Keep LOCKED pole and damping algorithms unchanged.
+- Add world-body, ordered-geometry, teleport, reload and isolated-preview regression
+  coverage. No schema, storage, protocol or public API changes.
+
 ## 2.5.0 — 2026-10-03
 
 - Add optional `ScenePort` retained world-scene output with stable command identity,

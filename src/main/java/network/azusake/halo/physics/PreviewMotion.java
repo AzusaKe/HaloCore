@@ -10,12 +10,14 @@ public final class PreviewMotion {
     private final AnchorFrameCalculator calculator = new AnchorFrameCalculator();
     private final FrameDelta clock = new FrameDelta();
     private AnchorFrame previous;
-    private HaloDefinition definition;
+    private AnchorFrameCalculator.OrientationInputs orientationInputs;
     private long nanos;
 
     public AnchorFrame calculate(PreviewFrame input, HaloDefinition current, HaloConfig config) {
-        if (definition != current || previous != null && input.frameNanos() < nanos) reset();
-        definition = current;
+        var inputs = AnchorFrameCalculator.orientationInputs(current, config);
+        if (orientationInputs != null && !orientationInputs.equals(inputs)
+                || previous != null && input.frameNanos() < nanos) reset();
+        orientationInputs = inputs;
         if (previous == null || input.frameNanos() != nanos) {
             previous = calculator.calculate(input.wearer(), previous == null, input.head(), input.head(),
                 current, input.camera().position(), clock.advance(input.frameNanos()), config);
@@ -30,6 +32,6 @@ public final class PreviewMotion {
         calculator.retainOnly(Set.of());
         clock.reset();
         previous = null;
-        definition = null;
+        orientationInputs = null;
     }
 }

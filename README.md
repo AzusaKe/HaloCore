@@ -227,7 +227,7 @@ unsupported physics explicitly; they need not implement new methods to keep thei
   sample retain the computed body; visual/GUI transforms may still change. A backward clock resets
   motion. First use snaps to the current target as in the world. After a long interval the same world
   delta clamp applies; hosts should call `resetMotion()` for discontinuous scene/model changes.
-- Switching wearer/runtime identity or definition, an unavailable appearance/resource generation,
+- Switching wearer/runtime identity or effective orientation inputs, an unavailable appearance/resource generation,
   and closing a session clear its motion. `resetMotion()` resets only the view, without replaying the
   shared startup animation. `isValid()` reports closed/world-invalidated sessions so hosts can recreate
   them. Both methods have defaults for old providers.
@@ -241,6 +241,21 @@ The implementation snapshot (`render.HaloAppearance`) is internal, not an adapte
 construct definition graphs or mutate `HaloInstance`. Submit scene-space preview heads through
 `AnchorSource.submitPreview`, never through the world-space `submit` method. Preview physics and third-party model capture live behind
 this independent capability without adding methods to older adapters' `ClientPort` implementations.
+
+## SYNC orientation and reloads (2.5.1 development)
+
+`sync_offset` is an Euler `[yaw, pitch, roll]` rotation in degrees (YXZ), expressed
+around the head's local axes. For first head rotation `H0`, LOCKED basis `L0` and
+offset `S`, capture `C = inverse(H0) * L0`, then `R = S * C`. World orientation is
+`H(t) * R`; applying `S` before converting the world basis into head space would
+incorrectly make the offset depend on the initial world orientation. Rigid previews
+use the same local composition; physical previews reuse world math with independent state.
+
+Changing effective offset, orientation mode or SYNC offset resets that wearer's motion
+on the next valid sample, including repeated-timestamp preview samples. Ownership and
+animation progress survive. Texture/layer-only reloads preserve physics. Teleports still
+recapture SYNC. These are internal behavior corrections; JSON schema and public APIs are unchanged.
+The existing LOCKED pole and damping algorithms are unchanged in this first repair stage.
 
 ## Frame and coordinate contract
 
