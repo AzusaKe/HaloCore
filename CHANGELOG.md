@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2.5.1 development
+## 2.5.1 — 2026-10-22
 
 - Apply SYNC `sync_offset` around head-local axes after converting the captured
   LOCKED basis out of world space, fixing dependence on the first head orientation.
