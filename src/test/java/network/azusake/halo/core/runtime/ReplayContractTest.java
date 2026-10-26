@@ -105,6 +105,7 @@ class ReplayContractTest {
             var first=new PreviewFrame(wearer,1,new AnchorPose(new AnchorVec3(0,1,0),new AnchorRotation(0,0,0,1)),
                 world.camera(),world.rootTransform(),0,0,LightSample.FULL_BRIGHT,t->true,VisualResources.EMPTY);
             var expected=preview.render(first);
+            assertFalse(expected.expandedBatches(first.visuals()).isEmpty());
             var later=new PreviewFrame(wearer,1,first.head(),first.camera(),first.rootTransform(),1_000_000,1_000_000_000_000L,
                 first.light(),first.textures(),first.visuals());
             assertEquals(expected,preview.render(later));preview.close();
