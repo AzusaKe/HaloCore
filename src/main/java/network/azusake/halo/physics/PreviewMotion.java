@@ -14,13 +14,24 @@ public final class PreviewMotion {
     private long nanos;
 
     public AnchorFrame calculate(PreviewFrame input, HaloDefinition current, HaloConfig config) {
+        return calculate(input,current,config,false);
+    }
+    /** Replay previews use the owning client's source clock without EMA or discarded source duration. */
+    public AnchorFrame calculate(PreviewFrame input, HaloDefinition current, HaloConfig config, boolean replay) {
         var inputs = AnchorFrameCalculator.orientationInputs(current, config);
         if (orientationInputs != null && !orientationInputs.equals(inputs)
                 || previous != null && input.frameNanos() < nanos) reset();
         orientationInputs = inputs;
         if (previous == null || input.frameNanos() != nanos) {
-            previous = calculator.calculate(input.wearer(), previous == null, input.head(), input.head(),
-                current, input.camera().position(), clock.advance(input.frameNanos()), config);
+            double dt=replay?previous==null?0:Math.max(0,(input.frameNanos()-nanos)/1_000_000_000.0):clock.advance(input.frameNanos());
+            if(replay){
+                do{
+                    double step=Math.min(dt,.05);
+                    previous=calculator.calculate(input.wearer(),previous==null,input.head(),input.head(),current,input.camera().position(),step,config);
+                    dt-=step;
+                }while(dt>1e-9);
+            }else previous = calculator.calculate(input.wearer(), previous == null, input.head(), input.head(),
+                current, input.camera().position(), dt, config);
             nanos = input.frameNanos();
         }
         // Multiple submissions of a single view sample must not advance damping twice.

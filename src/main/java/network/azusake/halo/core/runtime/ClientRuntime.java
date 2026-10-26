@@ -49,6 +49,8 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
             @Override public void resetMotion() { motion.reset(); owner = null; }
             @Override public FrameOutput render(PreviewFrame frame) {
                 Objects.requireNonNull(frame);
+                if(isReplay())frame=new PreviewFrame(frame.wearer(),frame.runtimeId(),frame.head(),frame.camera(),
+                    frame.rootTransform(),nowMillis(),replay.sourceNanos(),frame.light(),frame.textures(),frame.visuals(),frame.projection(),frame.primitiveMode());
                 var appearance = renderer.appearance(frame.wearer());
                 if (!isValid() || appearance == null
                         || !Objects.equals(entityIds.get(frame.wearer()), frame.runtimeId())
@@ -62,7 +64,7 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
                 runtimeId = frame.runtimeId();
                 if (options.physicsEnabled())
                     return viewRenderer.renderPreview(frame, appearance,
-                        motion.calculate(frame, appearance.definition(), config));
+                        motion.calculate(frame, appearance.definition(), config, isReplay()));
                 return viewRenderer.renderPreview(frame, appearance);
             }
             @Override public void close() { resetMotion(); viewRenderer = null; }

@@ -94,6 +94,22 @@ class ReplayContractTest {
             assertEquals(1_000,runtime.nowMillis());
         }
     }
+    @Test void physicalPreviewAlsoFreezesWithTheOwningReplaySource() throws Exception {
+        var def=definition();runtime.definitions(Map.of(def.id(),def));runtime.attach(wearer,def.id(),false);
+        try(var host=new ReplayHost(runtime,ui->{},message->fail(message))){
+            var snapshot=HaloReplayApi.openRecording("test:recorder",event->{}).orElseThrow().snapshot();
+            var playback=HaloReplayApi.openPlayback("test:player").orElseThrow();playback.restore(snapshot,0,0);
+            playback.frame(new ReplayFrameTime(0,0,0,0,true));runtime.render(scene(0,0,true));
+            var preview=runtime.openPreview(PreviewOptions.PHYSICS);
+            var world=scene(0,0,true);
+            var first=new PreviewFrame(wearer,1,new AnchorPose(new AnchorVec3(0,1,0),new AnchorRotation(0,0,0,1)),
+                world.camera(),world.rootTransform(),0,0,LightSample.FULL_BRIGHT,t->true,VisualResources.EMPTY);
+            var expected=preview.render(first);
+            var later=new PreviewFrame(wearer,1,first.head(),first.camera(),first.rootTransform(),1_000_000,1_000_000_000_000L,
+                first.light(),first.textures(),first.visuals());
+            assertEquals(expected,preview.render(later));preview.close();
+        }
+    }
     @Test void endingSnapshotWithoutAssignmentAndDelayedEntityStillFinishes() throws Exception {
         var def=definition(); runtime.definitions(Map.of(def.id(),def)); runtime.attach(wearer,def.id(),true);
         wall.addAndGet(100); runtime.render(scene(0,0,true)); runtime.hide(wearer,def.id());
