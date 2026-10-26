@@ -177,4 +177,14 @@ class ReplayContractTest {
         var playback=HaloReplayApi.openPlayback("test:player").orElseThrow();
         nextHost.close();assertFalse(playback.isValid());playback.close();
     }
+    @Test void connectionEndPublishesUiCloseBeforeReleasingRecordingObservers() {
+        var events=new ArrayList<ReplayEvent>();
+        try(var host=new ReplayHost(runtime,ui->{},message->fail(message))){
+            var recording=HaloReplayApi.openRecording("test:recorder",events::add).orElseThrow();
+            long session=host.uiOpened(wearer,"wearer");host.disconnect();
+            assertFalse(recording.isValid());assertEquals(2,events.size());
+            var close=assertInstanceOf(ReplayEvent.UiChanged.class,events.get(1));
+            assertEquals(session,close.ui().session());assertFalse(close.ui().open());
+        }
+    }
 }

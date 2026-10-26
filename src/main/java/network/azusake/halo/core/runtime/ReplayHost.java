@@ -152,6 +152,7 @@ public final class ReplayHost implements AutoCloseable {
     /** Connection teardown; a recording world switch should use a snapshot instead. */
     public void disconnect() {
         check();
+        if (!isPlayback() && ui.open()) uiClosed(ui.session());
         if (playback != null) playback.close();
         for (var recording : List.copyOf(recordings.values())) recording.close();
         ui = ReplayUiState.CLOSED; observed.clear();
