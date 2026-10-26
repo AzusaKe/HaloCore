@@ -39,7 +39,7 @@ public class HaloInstance {
     private volatile boolean entitySleeping;
 
     /** Epoch-millis timestamp when this instance was created. */
-    private final long createdAtTime;
+    private long createdAtTime;
 
     // ---- Transition animation state ----
 
@@ -48,6 +48,7 @@ public class HaloInstance {
 
     /** Epoch-millis timestamp when the current transition started. */
     private long transitionStartTime = 0;
+    private boolean transitionStarted;
 
     /**
      * The idle-animation phase (seconds since creation) frozen for the
@@ -213,6 +214,22 @@ public class HaloInstance {
         return transitionStartTime;
     }
 
+    /** A source time of zero (or a restored negative origin) is a valid transition start. */
+    public boolean hasTransition() { return transitionStarted; }
+
+    /** Internal replay restoration; relative progress is rebased to the current logical clock. */
+    public void restorePresentation(long ageMillis, HaloTransitionState state, long transitionAgeMillis,
+                                    double frozenPhase, boolean active, boolean hiddenByState) {
+        long now = clock.getAsLong();
+        createdAtTime = now - ageMillis;
+        transitionState = state;
+        transitionStarted = transitionAgeMillis >= 0;
+        transitionStartTime = transitionStarted ? now - transitionAgeMillis : 0;
+        transitionFreezeAnimTime = frozenPhase;
+        this.active = active; this.hiddenByState = hiddenByState;
+        transitionAnimCache.clear(); hideVisuals = Map.of(); needsSnap = true;
+    }
+
     /**
      * The frozen idle-animation phase for the current transition, in seconds.
      */
@@ -244,7 +261,7 @@ public class HaloInstance {
      */
     double currentAnimTime(long nowMillis, StartupAnimationConfig startupConfig) {
         double raw = (nowMillis - createdAtTime) / 1000.0;
-        if (transitionStartTime > 0) {
+        if (transitionStarted) {
             if (transitionState == HaloTransitionState.STARTING
                     || transitionState == HaloTransitionState.ENDING) {
                 // The idle animation is frozen at the captured phase.
@@ -274,6 +291,7 @@ public class HaloInstance {
      */
     public void startTransition(double freezeAnimTime) {
         this.transitionStartTime = clock.getAsLong();
+        this.transitionStarted = true;
         this.transitionFreezeAnimTime = freezeAnimTime;
         this.transitionAnimCache.clear();
         this.hideVisuals = Map.of();
@@ -334,7 +352,7 @@ public class HaloInstance {
      * @return {@code true} if a transition is in progress
      */
     public boolean isTransitioning(StartupAnimationConfig startupConfig, StartupAnimationConfig shutdownConfig) {
-        if (transitionStartTime == 0) {
+        if (!transitionStarted) {
             return false;
         }
         double elapsed = getTransitionElapsed();

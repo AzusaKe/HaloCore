@@ -96,8 +96,12 @@ public final class SceneRenderer {
     public HaloAppearance appearance(UUID wearer) { return appearances.get(wearer); }
     public void clearAppearances() { appearances.clear(); }
     private final Map<UUID,BodyPose> bodyPoses = new LinkedHashMap<>();
+    private final Map<UUID,AnchorFrame> replayBodies = new HashMap<>();
+    private final Map<UUID,HaloAppearance> replayAppearances = new HashMap<>();
+    private Long replayNanos;
     public Map<UUID,BodyPose> bodyPoses() { return Map.copyOf(bodyPoses); }
     public void clearEntity(UUID uuid) {
+        replayBodies.remove(uuid); replayAppearances.remove(uuid);
         appearances.remove(uuid); frameCalculator.clearEntity(uuid); idlePhaseTracker.remove(uuid); bodyPoses.remove(uuid);
         prevSleepHidden.remove(uuid); prevInvisHidden.remove(uuid);
     }
@@ -144,9 +148,22 @@ public final class SceneRenderer {
     /** Drop all recorded phases (full sync / world change). */
     public void clearIdlePhases() { idlePhaseTracker.clear(); }
     public void clearWorld() {
+        resetMotion();
         appearances.clear(); bodyPoses.clear(); clearIdlePhases(); frameCalculator.retainOnly(Set.of());
         prevSleepHidden.clear(); prevInvisHidden.clear(); frameDelta.reset();
         lastMissingDefWarningTime=null;
+    }
+
+    public void resetMotion() {
+        replayNanos=null; replayBodies.clear(); replayAppearances.clear();
+        bodyPoses.clear(); frameCalculator.retainOnly(Set.of()); frameDelta.reset();
+    }
+
+    public void restoreVisibility(UUID uuid, boolean sleeping, boolean invisible) {
+        HaloInstance instance=runtime.getInstance(uuid);
+        HaloDefinition definition=instance==null?null:runtime.definition(instance.getDefinitionId()).orElse(null);
+        prevSleepHidden.put(uuid, definition!=null && definition.hideOnSleep() && sleeping);
+        prevInvisHidden.put(uuid, definition!=null && !definition.displayInInvisible() && invisible);
     }
 
     // ------------------------------------------------------------------
@@ -179,22 +196,44 @@ public final class SceneRenderer {
 
         // Clean stale entries from the frame calculator's internal maps
         Set<UUID> activeUuids = visible.stream()
-            .filter(inst -> scene.entities().get(inst.getEntityUuid()).position().squaredDistanceTo(camera.getPos()) <= 65536)
+            .filter(inst -> runtime.isReplay() || scene.entities().get(inst.getEntityUuid()).position().squaredDistanceTo(camera.getPos()) <= 65536)
             .map(HaloInstance::getEntityUuid)
             .collect(Collectors.toSet());
         frameCalculator.retainOnly(activeUuids);
 
         // Compute frame delta with EMA smoothing to suppress nanoTime jitter
-        final double dt = frameDelta.advance(scene.frameNanos());
+        boolean newReplaySample = replayNanos == null || replayNanos != scene.frameNanos();
+        final double dt = runtime.isReplay()
+            ? replayNanos==null?0:Math.max(0,(scene.frameNanos()-replayNanos)/1_000_000_000.0)
+            : frameDelta.advance(scene.frameNanos());
+        if (runtime.isReplay() && newReplaySample) { replayNanos=scene.frameNanos(); replayAppearances.clear(); }
 
         for (HaloInstance instance : visible) {
             try {
-                HaloAppearance appearance = prepareAppearance(instance, client);
+                HaloAppearance appearance = runtime.isReplay() && replayAppearances.containsKey(instance.getEntityUuid())
+                    ? replayAppearances.get(instance.getEntityUuid()) : prepareAppearance(instance, client);
+                if (runtime.isReplay()) replayAppearances.put(instance.getEntityUuid(),appearance);
                 if (appearance != null) {
                     appearances.put(instance.getEntityUuid(), appearance);
                     EntitySample entity = scene.entities().get(instance.getEntityUuid());
-                    if (entity.position().squaredDistanceTo(camera.getPos()) <= 65536) {
-                        AnchorFrame frame = frameCalculator.calculate(instance, entity.anchor(), entity.fallbackAnchor(),
+                    if (runtime.isReplay() || entity.position().squaredDistanceTo(camera.getPos()) <= 65536) {
+                        AnchorFrame frame;
+                        if (runtime.isReplay()) {
+                            frame = replayBodies.get(instance.getEntityUuid());
+                            if (newReplaySample || frame == null || instance.isNeedsSnap()) {
+                                // Consume all source time. Small steps avoid the legacy per-step clamp at high replay speeds.
+                                double remaining=dt;
+                                do {
+                                    double step=Math.min(remaining,.05);
+                                    frame=frameCalculator.calculate(instance,entity.anchor(),entity.fallbackAnchor(),
+                                        appearance.definition(),Vec3d.ZERO,step,runtime.getConfig());
+                                    remaining-=step;
+                                } while(remaining>1e-9);
+                                replayBodies.put(instance.getEntityUuid(),frame);
+                            }
+                            frame=new AnchorFrame(frame.worldPosition(),frame.worldPosition().subtract(camera.getPos()),
+                                frame.worldOrientation(),frame.worldForward(),frame.toHeadDirection(),frame.scale());
+                        } else frame = frameCalculator.calculate(instance, entity.anchor(), entity.fallbackAnchor(),
                             appearance.definition(), camera.getPos(), dt, runtime.getConfig());
                         var rotation = frame.worldOrientation();
                         bodyPoses.put(instance.getEntityUuid(), new BodyPose(frame.worldPosition(),
@@ -228,6 +267,7 @@ public final class SceneRenderer {
             UUID uuid = inst.getEntityUuid();
             EntitySample entity = SceneRenderer.findEntityByUuid(client, uuid);
             if (entity == null || !entity.isAlive()) {
+                if (runtime.isReplay()) continue;
                 removals.add(uuid);
                 continue;
             }
@@ -385,7 +425,7 @@ public final class SceneRenderer {
 
         // Determine if transition is currently active
         boolean transitionActive = (state == HaloTransitionState.STARTING || state == HaloTransitionState.ENDING)
-            && instance.getTransitionStartTime() > 0;
+            && instance.hasTransition();
         double transitionElapsed = instance.getTransitionElapsed();
         boolean isStartup = state == HaloTransitionState.STARTING;
 
@@ -396,12 +436,12 @@ public final class SceneRenderer {
         // transition and resumes at its actual phase afterwards ----
         final double animTime;
         long transitionStart = instance.getTransitionStartTime();
-        if (transitionStart > 0
+        if (instance.hasTransition()
                 && (state == HaloTransitionState.STARTING || state == HaloTransitionState.ENDING)) {
             // Transition in progress — freeze the periodic animation at the
             // phase captured when the transition started.
             animTime = instance.getTransitionFreezeAnimTime();
-        } else if (transitionStart > 0) {
+        } else if (instance.hasTransition()) {
             // NORMAL right after a completed startup — resume the periodic
             // animation from where it would have been, skipping the transition.
             double transitionDur = startupConfig != null ? startupConfig.maxDuration() : 0.0;

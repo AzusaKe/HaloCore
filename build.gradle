@@ -92,6 +92,21 @@ tasks.register('verifyLegacyRenderConsumer', JavaExec) {
 }
 tasks.named('check') { dependsOn 'verifyLegacyRenderConsumer' }
 
+tasks.register('compileReplayConsumer', JavaCompile) {
+    dependsOn 'previewAnchorApiFixtureJar'
+    source = fileTree('src/testFixtures/replay-consumer') { include '**/*.java' }
+    classpath = files(tasks.named('previewAnchorApiFixtureJar').flatMap { it.archiveFile })
+    destinationDirectory = layout.buildDirectory.dir('compat/replay-consumer')
+}
+tasks.register('verifyExternalReplayConsumer', JavaExec) {
+    group = 'verification'
+    dependsOn 'compileReplayConsumer', 'jar'
+    classpath = files(tasks.named('compileReplayConsumer').flatMap { it.destinationDirectory },
+        tasks.named('jar').flatMap { it.archiveFile })
+    mainClass = 'compat.ReplayConsumer'
+}
+tasks.named('check') { dependsOn 'verifyExternalReplayConsumer' }
+
 tasks.register('compileLegacyMeshIndex', JavaCompile) {
     dependsOn 'classes'
     source = fileTree('src/testFixtures/mesh-index-2.3.1') { include '**/*.java' }

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.6.0-alpha.1 — unreleased, 2026-10-26
+
+- Add loader-neutral API v2 replay snapshots, relative presentation values, ordered events,
+  UI state and client-thread recording/playback sessions. Wire schema remains host-owned.
+- Restore startup/shutdown progress independently of entity availability, reject stale seeks,
+  isolate playback ownership and prevent recursive recording.
+- Drive playback/export presentation by source time; keep paused and repeated-view simulation
+  stationary while rebuilding camera-dependent geometry. Reset motion on discontinuous restores.
+- Treat time zero as a valid transition origin; preserve existing adapter/API signatures.
+- Add pipeline tests and a public-API-only independent consumer. Minecraft recorder integration,
+  video export, trimming and shader combinations still require separate platform validation.
+
 ## 2.5.1 — 2026-10-22
 
 - Apply SYNC `sync_offset` around head-local axes after converting the captured

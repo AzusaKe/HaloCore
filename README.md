@@ -1,4 +1,4 @@
-# HaloCore 2.5.1
+# HaloCore 2.6.0-alpha.1
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -12,6 +12,32 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 `check` also verifies the resolved dependencies and scans production bytecode for platform references.
 
 ## Adapter entry points
+
+### Replay extension (2.6.0-alpha.1, not yet game-validated)
+
+`api.v2.replay.HaloReplayApi` adds optional client-thread recording/playback sessions.
+An internal `core.runtime.ReplayHost` binds one client runtime and an immutable UI-state callback.
+Recording sessions observe effective changes and capture full snapshots with sequence watermarks,
+relative visual ages, transition progress and scepter state, including detached ENDING visuals.
+Healthy unloads do not revoke recorded ownership. Wire encoding and recorder hooks belong to hosts.
+
+Playback restores a baseline at its container timestamp and seek epoch, applies ordered events,
+and samples `ReplayFrameTime` before ticks and rendering. All public time units are nanoseconds.
+Both playback and export advance animation/physics by **source time**, including playback speed:
+one source second exported into half an output second advances presentation by one second.
+Output time/sample identity never imports wall-clock render cost. A stationary source and repeated
+views do not advance motion. Camera transforms are rebuilt from the same simulated body.
+Seek requires a new baseline/epoch; motion resets at the current anchor, without a recorded trajectory.
+No guarantee of bitwise cross-FPS or original gameplay positions is made.
+
+Snapshots replace all state, including empty ownership; events carry no absolute recording time.
+The host supplies rewritten container times after trimming. Late epochs and duplicate sequence
+numbers cannot overwrite newer state. Disconnect invalidates subscriptions and playback handles;
+closing playback removes its client state. Replayed changes are not recorded again.
+Only one playback controller may own a client, while recording observers may coexist.
+UI rendering and write-back isolation remain platform responsibilities. Old v2/ClientPort signatures
+remain available; the extension requires this core version and an adapter binding a replay host.
+Independent replay consumers compile with only public v2 types and run with the core jar + JDK.
 
 | Stage | Contract |
 | --- | --- |
@@ -372,7 +398,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the development version is **2.5.1**.
+Feature version is in `gradle.properties`; the development version is **2.6.0-alpha.1**.
 The latest release is **2.5.0** with tag **v2.5.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.

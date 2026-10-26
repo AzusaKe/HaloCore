@@ -17,6 +17,12 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
     private final Map<UUID,Integer> entityIds = new HashMap<>();
     private final LongSupplier clock;
     private Long frameTime;
+    private ReplayHost replay;
+    void bindReplay(ReplayHost value) { replay = value; }
+    public boolean isReplay() { return replay != null && replay.isPlayback(); }
+    public network.azusake.halo.api.v2.replay.ReplayFrameTime replayFrameTime() {
+        return replay == null ? null : replay.frameTime();
+    }
     private long worldToken=Long.MIN_VALUE;
     private Map<Identifier,HaloDefinition> definitions=Map.of();
     private Map<Identifier,HaloDefinition> definitionInput;
@@ -69,7 +75,7 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
         this.clock=Objects.requireNonNull(clock);
         this.renderer=new SceneRenderer(this, Objects.requireNonNull(missingDefinitionWarning));
     }
-    public long nowMillis() { return frameTime == null ? clock.getAsLong() : frameTime; }
+    public long nowMillis() { return isReplay() ? replay.nowMillis() : frameTime == null ? clock.getAsLong() : frameTime; }
     public HaloConfig getConfig() { return config; }
     public void setConfig(HaloConfig value) { config=value.copy(); }
     public void definitions(DefinitionSnapshot snapshot) {
@@ -92,32 +98,63 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
     }
     public Optional<HaloDefinition> definition(Identifier id) { return Optional.ofNullable(definitions.get(id)); }
     public void attach(UUID uuid,Identifier definition,boolean startup) {
-        if (definition.equals(assignments.get(uuid)) && visuals.containsKey(uuid)) return;
+        if (replay != null && replay.blocksLiveMutations()) return;
+        if (attachState(uuid, definition, startup) && replay != null) replay.changed(uuid);
+    }
+    private boolean attachState(UUID uuid,Identifier definition,boolean startup) {
+        if (definition.equals(assignments.get(uuid)) && visuals.containsKey(uuid)) return false;
         renderer.clearEntity(uuid);
         assignments.put(uuid,definition);
         HaloInstance inst=new HaloInstance(uuid,definition,this::nowMillis);
         if (startup) { inst.setTransitionState(HaloTransitionState.STARTING); inst.startTransition(0); }
         visuals.put(uuid,inst);
+        return true;
     }
     public void replace(Map<UUID,Identifier> snapshot) {
-        clear(); snapshot.forEach((uuid,id)->attach(uuid,id,false));
+        if (replay != null && replay.blocksLiveMutations()) return;
+        clearState(); snapshot.forEach((uuid,id)->attachState(uuid,id,false));
+        if (replay != null) replay.reset();
     }
     public void hide(UUID uuid,Identifier definition) {
-        assignments.remove(uuid);
+        if (replay != null && replay.blocksLiveMutations()) return;
+        boolean removed = assignments.remove(uuid) != null;
         HaloInstance inst=visuals.get(uuid);
-        if (inst==null || inst.getTransitionState()==HaloTransitionState.ENDING) return;
+        if (inst==null || inst.getTransitionState()==HaloTransitionState.ENDING) {
+            if (removed && replay != null) replay.changed(uuid);
+            return;
+        }
         IdlePhaseTracker.RenderState state=renderer.readLastRenderState(uuid);
         HaloDefinition def=definitions.get(inst.getDefinitionId());
         double freeze=inst.currentAnimTime(def==null?null:def.startupAnimation().orElse(null));
         inst.setHiddenByState(false); inst.reactivate();
         inst.setTransitionState(HaloTransitionState.ENDING); inst.startTransition(freeze);
         if (state!=null && state.transitionActive() && !state.groups().isEmpty()) inst.setHideVisuals(state.groups());
+        if (replay != null) replay.changed(uuid);
     }
     public void removeClientHalo(UUID uuid) { visuals.remove(uuid); renderer.clearEntity(uuid); }
-    public void unload(UUID uuid) { removeClientHalo(uuid); entityIds.remove(uuid); }
-    public void died(UUID uuid, boolean player) { unload(uuid); if (!player) assignments.remove(uuid); }
+    public void unload(UUID uuid) {
+        if (isReplay()) { renderer.clearEntity(uuid); HaloInstance inst=visuals.get(uuid); if(inst!=null)inst.markNeedsSnap(); }
+        else removeClientHalo(uuid);
+        entityIds.remove(uuid);
+    }
+    public void died(UUID uuid, boolean player) {
+        if (replay != null && replay.blocksLiveMutations()) { unload(uuid); return; }
+        unload(uuid); if (!player && assignments.remove(uuid) != null && replay != null) replay.changed(uuid);
+    }
     public void teleport(UUID uuid) { HaloInstance v=visuals.get(uuid); if(v!=null)v.markTeleported(); }
-    public void clear() { previewEpoch++; assignments.clear(); visuals.clear(); entityIds.clear(); renderer.clearWorld(); worldToken=Long.MIN_VALUE; }
+    public void clear() {
+        if (replay != null && replay.blocksLiveMutations()) return;
+        clearState(); if (replay != null) replay.reset();
+    }
+    private void clearState() { previewEpoch++; assignments.clear(); visuals.clear(); entityIds.clear(); renderer.clearWorld(); worldToken=Long.MIN_VALUE; }
+    void installReplayAssignment(UUID uuid, Identifier id) {
+        if (id == null) assignments.remove(uuid); else assignments.put(uuid, id);
+    }
+    void installReplayVisual(UUID uuid, HaloInstance inst) {
+        renderer.clearEntity(uuid); visuals.put(uuid, inst);
+    }
+    void clearReplayVisuals() { visuals.clear(); renderer.clearWorld(); }
+    void resetReplayMotion() { previewEpoch++; renderer.resetMotion(); visuals.values().forEach(HaloInstance::markNeedsSnap); }
     public HaloInstance getInstance(UUID uuid) { return visuals.get(uuid); }
     public Collection<HaloInstance> getAllInstances() { return visuals.values(); }
     public Map<UUID,HaloInstance> getActiveHalos() { return Map.copyOf(visuals); }
@@ -134,25 +171,35 @@ public final class ClientRuntime implements ClientPort, PreviewPort, ScenePort {
         return produceFrame(scene, input -> renderer.renderScene(input, definitionRevision));
     }
     private <T> T produceFrame(FrameScene scene, java.util.function.Function<FrameScene,T> render) {
+        if (isReplay()) {
+            scene = new FrameScene(scene.worldToken(), replay.nowMillis(), replay.sourceNanos(), scene.camera(),
+                scene.entities(), scene.rootTransform(), scene.lights(), scene.textures(), scene.visuals(),
+                scene.lightmaps(), scene.primitiveMode());
+        }
         frameTime=scene.timeMillis();
+        final FrameScene input=scene;
         try {
             if(worldToken!=scene.worldToken()) {
-                if(worldToken!=Long.MIN_VALUE) { previewEpoch++; visuals.clear(); entityIds.clear(); renderer.clearWorld(); }
+                if(worldToken!=Long.MIN_VALUE) {
+                    previewEpoch++; if (!isReplay()) visuals.clear(); entityIds.clear(); renderer.clearWorld();
+                }
                 worldToken=scene.worldToken();
             }
-            var gone = visuals.keySet().stream().filter(uuid -> !scene.entities().containsKey(uuid)
-                || !scene.entities().get(uuid).alive()).toList();
+            var gone = visuals.keySet().stream().filter(uuid -> !input.entities().containsKey(uuid)
+                || !input.entities().get(uuid).alive()).toList();
             gone.forEach(this::unload);
             entityIds.keySet().retainAll(scene.entities().keySet());
             scene.entities().forEach((uuid, entity) -> {
                 Integer previous = entityIds.put(uuid, entity.runtimeId());
-                if (previous != null && previous != entity.runtimeId()) removeClientHalo(uuid);
+                if (previous != null && previous != entity.runtimeId()) unload(uuid);
             });
             assignments.forEach((uuid,id)-> {
-                if(scene.entities().containsKey(uuid) && scene.entities().get(uuid).alive()) visuals.computeIfAbsent(uuid,k->new HaloInstance(k,id,this::nowMillis));
+                if(input.entities().containsKey(uuid) && input.entities().get(uuid).alive()) visuals.computeIfAbsent(uuid,k->new HaloInstance(k,id,this::nowMillis));
             });
             visualGeneration=scene.visuals().generation();
-            return render.apply(scene);
+            T output = render.apply(scene);
+            if (replay != null) replay.afterFrame();
+            return output;
         } finally { frameTime=null; }
     }
     @Override public FrameOutput renderFrame(FrameScene scene) { return produceFrame(scene); }
