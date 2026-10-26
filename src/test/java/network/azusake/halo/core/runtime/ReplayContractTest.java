@@ -152,4 +152,12 @@ class ReplayContractTest {
         }
         assertTrue(HaloReplayApi.openPlayback("test:player").isEmpty());
     }
+    @Test void handlesRemainSafelyInspectableAndClosableAfterHostTeardown() {
+        var host=new ReplayHost(runtime,ui->{},message->fail(message));
+        var recording=HaloReplayApi.openRecording("test:recorder",event->{}).orElseThrow();
+        host.close();assertFalse(recording.isValid());recording.close();
+        var nextHost=new ReplayHost(runtime,ui->{},message->fail(message));
+        var playback=HaloReplayApi.openPlayback("test:player").orElseThrow();
+        nextHost.close();assertFalse(playback.isValid());playback.close();
+    }
 }

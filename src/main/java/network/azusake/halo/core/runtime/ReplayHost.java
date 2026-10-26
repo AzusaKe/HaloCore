@@ -162,8 +162,11 @@ public final class ReplayHost implements AutoCloseable {
         if (bound == this) bound = null;
     }
     private void check() {
-        if (Thread.currentThread() != owner) throw new IllegalStateException("replay calls require the owning client thread");
+        checkThread();
         if (closed) throw new IllegalStateException("replay host is closed");
+    }
+    private void checkThread() {
+        if (Thread.currentThread() != owner) throw new IllegalStateException("replay calls require the owning client thread");
     }
     private static void requireId(String value) {
         if (value == null || !value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))
@@ -179,9 +182,9 @@ public final class ReplayHost implements AutoCloseable {
             check(); if (released) throw new IllegalStateException("recording session is closed");
             return ReplayHost.this.snapshot();
         }
-        @Override public boolean isValid() { check(); return !released; }
+        @Override public boolean isValid() { checkThread(); return !closed && !released; }
         @Override public void close() {
-            check(); if (released) return; released = true; recordings.remove(id, this);
+            checkThread(); if (released || closed) return; released = true; recordings.remove(id, this);
         }
     }
 
@@ -253,9 +256,9 @@ public final class ReplayHost implements AutoCloseable {
             if (time.discontinuity() && (frame == null || !time.equals(frame))) runtime.resetReplayMotion();
             epoch = time.epoch(); source = time.sourceNanos(); frame = time;
         }
-        @Override public boolean isValid() { check(); return !released; }
+        @Override public boolean isValid() { checkThread(); return !closed && !released; }
         @Override public void close() {
-            check(); if (released) return;
+            checkThread(); if (released || closed) return;
             released = true;
             applying = true;
             try { runtime.clear(); } finally { applying = false; }
