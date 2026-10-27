@@ -17,7 +17,7 @@ public final class ReplayTimeline {
     private final List<Entry> entries;
     private final Set<Object> seen=new HashSet<>();
     private boolean track,initialized;
-    private long epoch,previous=-1;
+    private long epoch,previous=-1,watermark=-1;
     private int cursor;
     public ReplayTimeline(List<Entry> input){
         entries=new ArrayList<>(input.stream().sorted(ORDER).toList());
@@ -37,16 +37,27 @@ public final class ReplayTimeline {
         if(!initialized || seek || source<previous){
             epoch=nextEpoch();int baseline=-1;
             for(int i=0;i<entries.size() && entries.get(i).sourceNanos()<=source;i++)if(entries.get(i).snapshot()!=null)baseline=i;
-            if(baseline<0){playback.restore(new ReplaySnapshot(0,Map.of(),Map.of(),ReplayUiState.CLOSED),0,epoch);cursor=0;}
-            else{var entry=entries.get(baseline);playback.restore(entry.snapshot(),entry.sourceNanos(),epoch);cursor=baseline+1;}
+            if(baseline<0){
+                playback.restore(new ReplaySnapshot(0,Map.of(),Map.of(),ReplayUiState.CLOSED),0,epoch);
+                cursor=0;watermark=-1; // The synthetic empty state must not cover a real sequence-zero baseline.
+            }else{
+                var entry=entries.get(baseline);playback.restore(entry.snapshot(),entry.sourceNanos(),epoch);
+                cursor=baseline+1;watermark=entry.snapshot().sequence();
+            }
             initialized=true;
         }
         while(cursor<entries.size() && entries.get(cursor).sourceNanos()<=source){
             var entry=entries.get(cursor++);
-            if(entry.snapshot()!=null)playback.restore(entry.snapshot(),entry.sourceNanos(),epoch);
-            else playback.apply(entry.event(),entry.sourceNanos(),epoch);
+            if(entry.snapshot()!=null){
+                // Periodic checkpoints describe state already produced by the event stream. Reinstalling
+                // them during continuous playback would discard physical inertia and preview sessions.
+                // A newer watermark still recovers changes not delivered as individual events.
+                if(entry.snapshot().sequence()>watermark){
+                    playback.restore(entry.snapshot(),entry.sourceNanos(),epoch);watermark=entry.snapshot().sequence();
+                }
+            }else if(playback.apply(entry.event(),entry.sourceNanos(),epoch))watermark=entry.event().sequence();
         }
         playback.frame(new ReplayFrameTime(epoch,sample,source,output,seek));previous=source;
     }
-    public void reset(){initialized=false;previous=-1;cursor=0;}
+    public void reset(){initialized=false;previous=-1;cursor=0;watermark=-1;}
 }

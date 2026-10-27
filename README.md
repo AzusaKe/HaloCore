@@ -1,4 +1,4 @@
-# HaloCore 2.6.0-alpha.1
+# HaloCore 2.6.0-alpha.2
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -13,7 +13,7 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 
 ## Adapter entry points
 
-### Replay extension (2.6.0-alpha.1, not yet game-validated)
+### Replay extension (2.6.0-alpha.2, not yet game-validated)
 
 `api.v2.replay.HaloReplayApi` adds optional client-thread recording/playback sessions.
 An internal `core.runtime.ReplayHost` binds one client runtime and an immutable UI-state callback.
@@ -31,6 +31,9 @@ Seek requires a new baseline/epoch; motion resets at the current anchor, without
 No guarantee of bitwise cross-FPS or original gameplay positions is made.
 
 Snapshots replace all state, including empty ownership; events carry no absolute recording time.
+The shared timeline uses snapshots for seeks and missing-event recovery. During continuous playback,
+checkpoints whose sequence watermark is already covered are retained for future seeks without
+reinstalling presentation or resetting physical inertia.
 The host supplies rewritten container times after trimming. Late epochs and duplicate sequence
 numbers cannot overwrite newer state. Disconnect invalidates subscriptions and playback handles;
 closing playback removes its client state. Replayed changes are not recorded again.
@@ -398,7 +401,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the development version is **2.6.0-alpha.1**.
+Feature version is in `gradle.properties`; the development version is **2.6.0-alpha.2**.
 The latest release is **2.5.0** with tag **v2.5.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.

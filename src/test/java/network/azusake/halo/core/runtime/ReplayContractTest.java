@@ -94,6 +94,33 @@ class ReplayContractTest {
             assertEquals(1_000,runtime.nowMillis());
         }
     }
+    @Test void periodicCheckpointsDoNotDisturbContinuousBodyOrAnimationInPlaybackAndExport() throws Exception {
+        for(var mode:List.of(ReplayPlaybackSession.Mode.PLAYBACK,ReplayPlaybackSession.Mode.EXPORTING))
+            assertEquals(continuousMotion(false,mode),continuousMotion(true,mode),mode.toString());
+    }
+    private record MotionSample(BodyPose body,double animationTime){}
+    private List<MotionSample> continuousMotion(boolean checkpoints,ReplayPlaybackSession.Mode mode) throws Exception {
+        var def=definition();runtime.definitions(Map.of(def.id(),def));runtime.attach(wearer,def.id(),false);
+        try(var host=new ReplayHost(runtime,ui->{},message->fail(message))){
+            var snapshot=HaloReplayApi.openRecording("test:recorder",event->{}).orElseThrow().snapshot();
+            var entries=new ArrayList<ReplayTimeline.Entry>();entries.add(new ReplayTimeline.Entry(0,0,snapshot,null));
+            if(checkpoints){
+                var state=new ReplayStateAccumulator();state.restore(snapshot,0);
+                for(int second:List.of(2,4))entries.add(new ReplayTimeline.Entry(second*1_000_000_000L,second,
+                    state.snapshotAt(second*1_000_000_000L),null));
+            }
+            var timeline=new ReplayTimeline(entries);
+            var playback=HaloReplayApi.openPlayback("test:player").orElseThrow();playback.mode(mode);
+            var result=new ArrayList<MotionSample>();
+            for(int frame=0;frame<=100;frame++){
+                long source=frame*50_000_000L;
+                timeline.advance(playback,source,source/2,frame,frame==0);
+                assertFalse(runtime.render(scene(frame*.03,0,true)).isEmpty());
+                result.add(new MotionSample(runtime.bodyPoses().get(wearer),runtime.renderer().appearance(wearer).animationTime()));
+            }
+            return result;
+        }
+    }
     @Test void physicalPreviewAlsoFreezesWithTheOwningReplaySource() throws Exception {
         var def=definition();runtime.definitions(Map.of(def.id(),def));runtime.attach(wearer,def.id(),false);
         try(var host=new ReplayHost(runtime,ui->{},message->fail(message))){

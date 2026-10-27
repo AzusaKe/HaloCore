@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0-alpha.2 — unreleased, 2026-10-27
+
+- Keep physical inertia and animation continuous when passing periodic replay checkpoints
+  already covered by applied events. Restore checkpoints on seeks and when their watermark
+  recovers missing changes; retain the first sequence-zero baseline after an empty lead-in.
+- Reproduce and fix the ReplayMod periodic snap in body/animation pipeline tests for normal
+  playback and retimed export. No public API or recording schema change; existing tracks work.
+
 ## 2.6.0-alpha.1 — unreleased, 2026-10-26
 
 - Add loader-neutral API v2 replay snapshots, relative presentation values, ordered events,
