@@ -1,4 +1,4 @@
-# HaloCore 2.6.0-alpha.2
+# HaloCore 2.6.0
 
 Java 17 core of Halo. This repository builds without Minecraft, Fabric, Loom or a graphics context.
 The host owns file/resource I/O, game objects, byte codecs, thread dispatch and GPU submission.
@@ -13,9 +13,12 @@ not shaded into the core jar. Tests use versioned fixtures under `src/test/resou
 
 ## Adapter entry points
 
-### Replay extension (2.6.0-alpha.2, not yet game-validated)
+### Replay extension (2.6.0)
 
 `api.v2.replay.HaloReplayApi` adds optional client-thread recording/playback sessions.
+The maintainer validated the Minecraft 1.21.1 Fabric ReplayMod/Flashback adapters and confirmed
+the periodic ReplayMod snap fix on 2026-10-27. Other platforms and unreported mod combinations
+require their own adapter validation; core remains independent of those recorder libraries.
 An internal `core.runtime.ReplayHost` binds one client runtime and an immutable UI-state callback.
 Recording sessions observe effective changes and capture full snapshots with sequence watermarks,
 relative visual ages, transition progress and scepter state, including detached ENDING visuals.
@@ -401,7 +404,7 @@ uses the compatibility expansion path still pays per-frame transformation and up
 
 ## Versioning
 
-Feature version is in `gradle.properties`; the development version is **2.6.0-alpha.2**.
+Feature version is in `gradle.properties`; the development version is **2.6.0**.
 The latest release is **2.5.0** with tag **v2.5.0**;
 schema **1.1.0**.
 The first mesh release was **2.0.0**.

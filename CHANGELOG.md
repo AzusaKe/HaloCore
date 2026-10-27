@@ -1,24 +1,23 @@
 # Changelog
 
-## 2.6.0-alpha.2 — unreleased, 2026-10-27
+## 2.6.0 — 2026-10-27
 
-- Keep physical inertia and animation continuous when passing periodic replay checkpoints
-  already covered by applied events. Restore checkpoints on seeks and when their watermark
-  recovers missing changes; retain the first sequence-zero baseline after an empty lead-in.
-- Reproduce and fix the ReplayMod periodic snap in body/animation pipeline tests for normal
-  playback and retimed export. No public API or recording schema change; existing tracks work.
-
-## 2.6.0-alpha.1 — unreleased, 2026-10-26
-
-- Add loader-neutral API v2 replay snapshots, relative presentation values, ordered events,
-  UI state and client-thread recording/playback sessions. Wire schema remains host-owned.
-- Restore startup/shutdown progress independently of entity availability, reject stale seeks,
-  isolate playback ownership and prevent recursive recording.
-- Drive playback/export presentation by source time; keep paused and repeated-view simulation
-  stationary while rebuilding camera-dependent geometry. Reset motion on discontinuous restores.
-- Treat time zero as a valid transition origin; preserve existing adapter/API signatures.
-- Add pipeline tests and a public-API-only independent consumer. Minecraft recorder integration,
-  video export, trimming and shader combinations still require separate platform validation.
+- Add optional loader-neutral API v2 replay sessions, immutable full snapshots, ordered effective
+  ownership/presentation events and scepter UI state. Preserve all existing v2 and ClientPort signatures.
+- Restore startup/shutdown progress independently of loaded entities, reject stale seek epochs and
+  duplicate events, preserve empty snapshots and detached closing visuals, and isolate playback
+  ownership from live mutations and recursive recording. Disconnect closes UI before releasing observers.
+- Advance playback and export animation/physics by recording source time, including retiming,
+  independently of wall-clock render cost. Pause and repeated views freeze simulation; discontinuous
+  seeks reset motion at the current anchor without storing trajectories or physics checkpoints.
+- Share indexed/streaming restoration, nearest-snapshot selection and neutral state folding for
+  trimmed/rebased recordings. Keep physical inertia across periodic checkpoints already covered by
+  events, fixing the ReplayMod playback/export snap while retaining missing-event recovery.
+- Treat zero as a valid transition origin and drive physical previews by the owning replay clock.
+  Keep Java 17, existing dependencies, definitions, saves and online network contracts unchanged.
+- Pass all 364 tests, independent replay/preview consumers, frozen legacy callers and platform/dependency
+  boundaries. The maintainer confirmed the 1.21.1 Fabric replay fix with no further observed anomalies;
+  game adapters and other mod combinations retain their own validation scope.
 
 ## 2.5.1 — 2026-10-22
 
